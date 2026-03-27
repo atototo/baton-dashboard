@@ -1,0 +1,12 @@
+{
+  "name": "baton-dashboard",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "pnpm -r --parallel run dev",
+    "dev:api": "pnpm --filter api run dev",
+    "dev:web": "pnpm --filter web run dev",
+    "build": "pnpm -r run build",
+    "typecheck": "pnpm -r run typecheck"
+  }
+}
