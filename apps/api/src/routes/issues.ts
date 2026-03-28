@@ -8,12 +8,14 @@ export const issuesRoute = new Hono();
 issuesRoute.get("/", async (c) => {
   const status = c.req.query("status");
   const projectId = c.req.query("projectId");
+  const companyId = c.req.query("companyId");
   const limit = Number(c.req.query("limit")) || 50;
   const offset = Number(c.req.query("offset")) || 0;
 
   const conditions = [isNull(schema.issues.hiddenAt)];
   if (status) conditions.push(eq(schema.issues.status, status));
   if (projectId) conditions.push(eq(schema.issues.projectId, projectId));
+  if (companyId) conditions.push(eq(schema.issues.companyId, companyId));
 
   const rows = await db
     .select({

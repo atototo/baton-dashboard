@@ -1,11 +1,16 @@
 import { Hono } from "hono";
 import { db, schema } from "../db/index.js";
-import { eq, desc } from "drizzle-orm";
+import { eq, desc, and } from "drizzle-orm";
 
 export const agentsRoute = new Hono();
 
 // GET /api/agents - 에이전트 목록
 agentsRoute.get("/", async (c) => {
+  const companyId = c.req.query("companyId");
+
+  const conditions = [];
+  if (companyId) conditions.push(eq(schema.agents.companyId, companyId));
+
   const rows = await db
     .select({
       id: schema.agents.id,
@@ -20,6 +25,7 @@ agentsRoute.get("/", async (c) => {
       createdAt: schema.agents.createdAt,
     })
     .from(schema.agents)
+    .where(conditions.length > 0 ? and(...conditions) : undefined)
     .orderBy(desc(schema.agents.updatedAt));
 
   return c.json(rows);
