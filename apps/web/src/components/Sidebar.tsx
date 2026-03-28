@@ -1,6 +1,8 @@
 import { Link, useLocation } from "react-router-dom";
 import { LayoutDashboard, ListTodo, FolderKanban, Bot, BarChart3, ChevronDown } from "lucide-react";
 import { useCompany } from "../context/CompanyContext";
+import { useQuery } from "../hooks/useQuery";
+import { api } from "../lib/api";
 
 const NAV_ITEMS = [
   { label: "대시보드", icon: LayoutDashboard, path: "/" },
@@ -14,8 +16,13 @@ export function Sidebar() {
   const location = useLocation();
   const { companies, selectedCompanyId, setSelectedCompanyId } = useCompany();
 
+  const { data: projects } = useQuery(
+    () => api.getProjects(selectedCompanyId || undefined),
+    [selectedCompanyId]
+  );
+
   return (
-    <aside className="w-64 bg-white border-r border-gray-200 flex flex-col h-screen sticky top-0">
+    <aside className="w-64 bg-white border-r border-gray-200 flex flex-col h-screen sticky top-0 overflow-y-auto">
       <div className="p-6">
         <div className="flex items-center gap-3 mb-8">
           <span className="text-2xl">🏏</span>
@@ -32,6 +39,7 @@ export function Sidebar() {
               onChange={(e) => setSelectedCompanyId(e.target.value)}
               className="w-full appearance-none bg-gray-50 border border-gray-200 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block p-2.5"
             >
+              <option value="" disabled>Select Company</option>
               {companies.map((company) => (
                 <option key={company.id} value={company.id}>
                   {company.name}
@@ -44,7 +52,7 @@ export function Sidebar() {
           </div>
         </div>
 
-        <nav className="space-y-1">
+        <nav className="space-y-1 mb-8">
           {NAV_ITEMS.map((item) => {
             const isActive = location.pathname === item.path || 
                              (item.path !== "/" && location.pathname.startsWith(item.path));
@@ -66,6 +74,29 @@ export function Sidebar() {
             );
           })}
         </nav>
+
+        {projects && projects.length > 0 && (
+          <div>
+            <label className="block text-xs font-medium text-gray-500 uppercase tracking-wider mb-2 px-3">
+              Projects
+            </label>
+            <div className="space-y-1">
+              {projects.map((project) => (
+                <Link
+                  key={project.id}
+                  to={`/projects/${project.id}`}
+                  className="flex items-center gap-3 px-3 py-2 text-sm text-gray-600 rounded-lg hover:bg-gray-50 hover:text-gray-900 transition-colors"
+                >
+                  <div 
+                    className="w-2 h-2 rounded-full" 
+                    style={{ backgroundColor: project.color || "#94a3b8" }}
+                  />
+                  <span className="truncate">{project.name}</span>
+                </Link>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="mt-auto p-6 border-t border-gray-100">
