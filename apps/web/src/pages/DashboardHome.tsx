@@ -3,11 +3,26 @@ import { useQuery } from "../hooks/useQuery";
 import { StatCard } from "../components/StatCard";
 import { IssueList } from "../components/IssueList";
 import { AgentList } from "../components/AgentList";
+import { useCompany } from "../context/CompanyContext";
 
 export function DashboardHome() {
-  const stats = useQuery(() => api.getOverview(), []);
-  const issues = useQuery(() => api.getIssues({ limit: "20" }), []);
-  const agents = useQuery(() => api.getAgents(), []);
+  const { selectedCompanyId } = useCompany();
+
+  const stats = useQuery(
+    () => api.getOverview(selectedCompanyId || undefined),
+    [selectedCompanyId]
+  );
+  const issues = useQuery(
+    () => api.getIssues({ 
+      limit: "20", 
+      ...(selectedCompanyId ? { companyId: selectedCompanyId } : {}) 
+    }),
+    [selectedCompanyId]
+  );
+  const agents = useQuery(
+    () => api.getAgents(selectedCompanyId || undefined),
+    [selectedCompanyId]
+  );
 
   return (
     <div className="space-y-6">

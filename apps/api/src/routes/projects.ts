@@ -1,11 +1,16 @@
 import { Hono } from "hono";
 import { db, schema } from "../db/index.js";
-import { eq, desc, isNull } from "drizzle-orm";
+import { eq, desc, isNull, and } from "drizzle-orm";
 
 export const projectsRoute = new Hono();
 
 // GET /api/projects - 프로젝트 목록 (archived 제외)
 projectsRoute.get("/", async (c) => {
+  const companyId = c.req.query("companyId");
+
+  const conditions = [isNull(schema.projects.archivedAt)];
+  if (companyId) conditions.push(eq(schema.projects.companyId, companyId));
+
   const rows = await db
     .select({
       id: schema.projects.id,
@@ -21,7 +26,7 @@ projectsRoute.get("/", async (c) => {
     })
     .from(schema.projects)
     .leftJoin(schema.agents, eq(schema.projects.leadAgentId, schema.agents.id))
-    .where(isNull(schema.projects.archivedAt))
+    .where(and(...conditions))
     .orderBy(desc(schema.projects.updatedAt));
 
   return c.json(rows);

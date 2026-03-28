@@ -70,12 +70,21 @@ export interface Company {
 }
 
 export const api = {
-  getOverview: () => fetchJson<OverviewStats>("/stats/overview"),
+  getOverview: (companyId?: string) => {
+    const qs = companyId ? `?companyId=${companyId}` : "";
+    return fetchJson<OverviewStats>(`/stats/overview${qs}`);
+  },
   getCompanies: () => fetchJson<Company[]>("/companies"),
   getIssues: (params?: Record<string, string>) => {
     const qs = params ? "?" + new URLSearchParams(params).toString() : "";
     return fetchJson<Issue[]>(`/issues${qs}`);
   },
-  getAgents: () => fetchJson<Agent[]>("/agents"),
-  getProjects: () => fetchJson<Project[]>("/projects"),
+  getAgents: (companyId?: string) => {
+    const qs = companyId ? `?companyId=${companyId}` : "";
+    return fetchJson<Agent[]>(`/agents${qs}`);
+  },
+  getProjects: (companyId?: string) => {
+    const qs = companyId ? `?companyId=${companyId}` : "";
+    return fetchJson<Project[]>(`/projects${qs}`);
+  },
 };
