@@ -64,8 +64,14 @@ export interface Project {
   leadAgentIcon: string | null;
 }
 
+export interface Company {
+  id: string;
+  name: string;
+}
+
 export const api = {
   getOverview: () => fetchJson<OverviewStats>("/stats/overview"),
+  getCompanies: () => fetchJson<Company[]>("/companies"),
   getIssues: (params?: Record<string, string>) => {
     const qs = params ? "?" + new URLSearchParams(params).toString() : "";
     return fetchJson<Issue[]>(`/issues${qs}`);
