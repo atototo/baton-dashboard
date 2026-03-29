@@ -54,6 +54,42 @@ const getRunWithEvents = async () => {
   return row.id;
 };
 
+const getAgentWithPromptData = async () => {
+  const result = await db.execute(sql`
+    select
+      a.id,
+      a.company_id as "companyId",
+      a.name
+    from agents a
+    join agent_instructions ai on ai.agent_id = a.id
+    join heartbeat_runs hr on hr.agent_id = a.id
+    where hr.prompt_snapshot is not null
+    order by hr.created_at desc
+    limit 1
+  `);
+
+  const [row] = result as unknown as Array<{ id: string; companyId: string; name: string }>;
+  assert.ok(row?.id, "an agent with instructions and prompt data should exist");
+  return row;
+};
+
+const getAgentWithCosts = async () => {
+  const result = await db.execute(sql`
+    select
+      a.id,
+      a.company_id as "companyId"
+    from agents a
+    join cost_events ce on ce.agent_id = a.id
+    group by a.id, a.company_id
+    order by max(ce.occurred_at) desc
+    limit 1
+  `);
+
+  const [row] = result as unknown as Array<{ id: string; companyId: string }>;
+  assert.ok(row?.id, "an agent with cost events should exist");
+  return row;
+};
+
 test("GET /api/companies returns active companies", async () => {
   const response = await app.request("/api/companies");
 
@@ -315,6 +351,73 @@ test("GET /api/runs/:id/events returns heartbeat run events", async () => {
   assert.ok(Array.isArray(events));
   assert.ok(events.length > 0);
   assert.equal(events[0].runId, runId);
+});
+
+test("GET /api/agents/:id/instructions returns the managed instruction bundle", async () => {
+  const agent = await getAgentWithPromptData();
+
+  const response = await app.request(`/api/agents/${agent.id}/instructions`);
+
+  assert.equal(response.status, 200);
+
+  const payload = await response.json();
+  assert.equal(payload.agentId, agent.id);
+  assert.equal(typeof payload.entryFilePath, "string");
+  assert.ok(Array.isArray(payload.files));
+  assert.ok(payload.files.length > 0);
+  assert.ok(payload.files.some((file: { isEntryFile: boolean }) => file.isEntryFile));
+  assert.equal(typeof payload.bundleText, "string");
+  assert.ok(payload.bundleText.length > 0);
+});
+
+test("GET /api/agents/:id/prompt-stack returns five ordered layers", async () => {
+  const agent = await getAgentWithPromptData();
+
+  const response = await app.request(`/api/agents/${agent.id}/prompt-stack`);
+
+  assert.equal(response.status, 200);
+
+  const payload = await response.json();
+  assert.equal(payload.agentId, agent.id);
+  assert.ok(Array.isArray(payload.layers));
+  assert.equal(payload.layers.length, 5);
+  assert.deepEqual(
+    payload.layers.map((layer: { key: string }) => layer.key),
+    ["agent_instructions", "baton_skill", "project_conventions", "wake_context", "prompt_template"],
+  );
+  assert.ok(payload.layers.every((layer: { order: number; estimatedTokens: number }) => Number.isInteger(layer.order) && layer.estimatedTokens >= 0));
+});
+
+test("GET /api/agents/:id/runs returns latest runs with excerpts", async () => {
+  const agent = await getAgentWithPromptData();
+
+  const response = await app.request(`/api/agents/${agent.id}/runs`);
+
+  assert.equal(response.status, 200);
+
+  const payload = await response.json();
+  assert.equal(payload.agentId, agent.id);
+  assert.ok(Array.isArray(payload.runs));
+  assert.ok(payload.runs.length > 0);
+  assert.ok("excerpt" in payload.runs[0]);
+  assert.ok("invocationSource" in payload.runs[0]);
+  assert.ok("triggerDetail" in payload.runs[0]);
+});
+
+test("GET /api/agents/:id/costs returns aggregated token and cost totals", async () => {
+  const agent = await getAgentWithCosts();
+
+  const response = await app.request(`/api/agents/${agent.id}/costs`);
+
+  assert.equal(response.status, 200);
+
+  const payload = await response.json();
+  assert.equal(payload.agentId, agent.id);
+  assert.equal(typeof payload.totals.inputTokens, "number");
+  assert.equal(typeof payload.totals.outputTokens, "number");
+  assert.equal(typeof payload.totals.costCents, "number");
+  assert.equal(typeof payload.totals.eventCount, "number");
+  assert.ok("window" in payload);
 });
 
 test.after(async () => {

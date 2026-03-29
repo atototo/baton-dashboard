@@ -753,6 +753,35 @@ export const agents = pgTable("agents", {
 			columns: [table.reportsTo],
 			foreignColumns: [table.id],
 			name: "agents_reports_to_agents_id_fk"
+	}),
+]);
+
+export const agentInstructions = pgTable("agent_instructions", {
+	id: uuid().defaultRandom().primaryKey().notNull(),
+	companyId: uuid("company_id").notNull(),
+	agentId: uuid("agent_id").notNull(),
+	path: text().notNull(),
+	content: text().notNull(),
+	isEntryFile: boolean("is_entry_file").default(false).notNull(),
+	source: text().default('managed').notNull(),
+	contentHash: text("content_hash"),
+	syncedFrom: text("synced_from"),
+	syncedAt: timestamp("synced_at", { withTimezone: true, mode: 'string' }),
+	createdAt: timestamp("created_at", { withTimezone: true, mode: 'string' }).defaultNow().notNull(),
+	updatedAt: timestamp("updated_at", { withTimezone: true, mode: 'string' }).defaultNow().notNull(),
+}, (table) => [
+	index("agent_instructions_agent_idx").using("btree", table.agentId.asc().nullsLast().op("uuid_ops")),
+	index("agent_instructions_company_idx").using("btree", table.companyId.asc().nullsLast().op("uuid_ops")),
+	unique("agent_instructions_agent_path_uniq").on(table.agentId, table.path),
+	foreignKey({
+			columns: [table.companyId],
+			foreignColumns: [companies.id],
+			name: "agent_instructions_company_id_companies_id_fk"
+		}),
+	foreignKey({
+			columns: [table.agentId],
+			foreignColumns: [agents.id],
+			name: "agent_instructions_agent_id_agents_id_fk"
 		}),
 ]);
 
