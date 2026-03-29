@@ -1,9 +1,9 @@
-import { api } from "../lib/api";
-import { useQuery } from "../hooks/useQuery";
-import { StatCard } from "../components/StatCard";
-import { IssueList } from "../components/IssueList";
-import { AgentList } from "../components/AgentList";
-import { useCompany } from "../context/CompanyContext";
+import { api } from "../lib/api.js";
+import { useQuery } from "../hooks/useQuery.js";
+import { StatCard } from "../components/StatCard.js";
+import { IssueList } from "../components/IssueList.js";
+import { AgentList } from "../components/AgentList.js";
+import { useCompany } from "../context/CompanyContext.js";
 
 export function DashboardHome() {
   const { selectedCompanyId } = useCompany();
@@ -50,7 +50,7 @@ export function DashboardHome() {
           <StatCard label="Backlog" value={stats.data.issues.backlog} color="text-gray-600" />
           <StatCard label="In Progress" value={stats.data.issues.inProgress} color="text-blue-600" />
           <StatCard label="In Review" value={stats.data.issues.inReview} color="text-yellow-600" />
-          <StatCard label="Completed" value={stats.data.issues.completed} color="text-green-600" />
+          <StatCard label="Done" value={stats.data.issues.done} color="text-green-600" />
           <StatCard label="Agents" value={stats.data.agents.total} color="text-purple-600" />
         </div>
       ) : null}

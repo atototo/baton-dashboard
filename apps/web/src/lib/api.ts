@@ -12,7 +12,7 @@ export interface OverviewStats {
     backlog: number;
     inProgress: number;
     inReview: number;
-    completed: number;
+    done: number;
     cancelled: number;
   };
   agents: { total: number; active: number; idle: number };
@@ -135,6 +135,16 @@ export interface Company {
   name: string;
 }
 
+export interface IssueStatusStats {
+  status: string;
+  count: number;
+}
+
+export interface ProjectStats {
+  total: number;
+  byStatus: Record<string, number>;
+}
+
 export const api = {
   getOverview: (companyId?: string) => {
     const qs = companyId ? `?companyId=${companyId}` : "";
@@ -146,6 +156,19 @@ export const api = {
     return fetchJson<Issue[]>(`/issues${qs}`);
   },
   getIssue: (id: string) => fetchJson<Issue>(`/issues/${id}`),
+  updateIssue: (id: string, updates: Partial<Issue>) =>
+    fetch(`${BASE}/issues/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(updates),
+    }).then((res) => {
+      if (!res.ok) throw new Error("Failed to update issue");
+      return res.json() as Promise<Issue>;
+    }),
+  getIssueStats: (params?: Record<string, string>) => {
+    const qs = params ? "?" + new URLSearchParams(params).toString() : "";
+    return fetchJson<IssueStatusStats[]>(`/issues/stats/summary${qs}`);
+  },
   getIssueComments: (id: string) => fetchJson<IssueComment[]>(`/issues/${id}/comments`),
   createIssueComment: (id: string, body: string) =>
     fetch(`${BASE}/issues/${id}/comments`, {
@@ -161,9 +184,22 @@ export const api = {
     const qs = companyId ? `?companyId=${companyId}` : "";
     return fetchJson<Agent[]>(`/agents${qs}`);
   },
+  getAgent: (id: string) => fetchJson<Agent>(`/agents/${id}`),
   getProjects: (companyId?: string) => {
     const qs = companyId ? `?companyId=${companyId}` : "";
     return fetchJson<Project[]>(`/projects${qs}`);
+  },
+  getProject: (id: string) => fetchJson<Project>(`/projects/${id}`),
+  getProjectStats: async (id: string): Promise<ProjectStats> => {
+    try {
+      return await fetchJson<ProjectStats>(`/projects/${id}/stats`);
+    } catch (e) {
+      console.warn("Failed to get project stats via direct endpoint, falling back to issues summary", e);
+      const rows = await api.getIssueStats({ projectId: id });
+      const byStatus = Object.fromEntries(rows.map((r) => [r.status, r.count]));
+      const total = rows.reduce((sum, r) => sum + r.count, 0);
+      return { total, byStatus };
+    }
   },
   getRunPromptSnapshot: (id: string) => fetchJson<any>(`/runs/${id}/prompt-snapshot`),
   getRunEvents: (id: string) => fetchJson<RunEvent[]>(`/runs/${id}/events`),

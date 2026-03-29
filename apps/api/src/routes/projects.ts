@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { db, schema } from "../db/index.js";
-import { eq, desc, isNull, and } from "drizzle-orm";
+import { eq, desc, isNull, and, count } from "drizzle-orm";
 
 export const projectsRoute = new Hono();
 
@@ -44,4 +44,23 @@ projectsRoute.get("/:id", async (c) => {
 
   if (!row) return c.json({ error: "Not found" }, 404);
   return c.json(row);
+});
+
+// GET /api/projects/:id/stats - 프로젝트 이슈 통계
+projectsRoute.get("/:id/stats", async (c) => {
+  const id = c.req.param("id");
+
+  const rows = await db
+    .select({
+      status: schema.issues.status,
+      count: count(),
+    })
+    .from(schema.issues)
+    .where(and(eq(schema.issues.projectId, id), isNull(schema.issues.hiddenAt)))
+    .groupBy(schema.issues.status);
+
+  return c.json({
+    total: rows.reduce((sum, row) => sum + row.count, 0),
+    byStatus: Object.fromEntries(rows.map((row) => [row.status, row.count])),
+  });
 });
