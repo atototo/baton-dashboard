@@ -48,7 +48,9 @@ export function CommentThread({ issueId }: CommentThreadProps) {
           <div key={comment.id} className="group">
             <div className="flex items-start gap-4">
               <div className="w-10 h-10 rounded-xl bg-gray-50 flex items-center justify-center text-xl shadow-sm ring-1 ring-gray-100 shrink-0">
-                {comment.authorAgentIcon || (comment.authorUserId ? "👤" : "❓")}
+                {comment.authorAgentIcon && /\p{Emoji}/u.test(comment.authorAgentIcon)
+                  ? comment.authorAgentIcon
+                  : comment.authorUserId ? "👤" : "🤖"}
               </div>
               <div className="flex-1 space-y-1.5">
                 <div className="flex items-center justify-between">
