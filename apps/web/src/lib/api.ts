@@ -104,6 +104,14 @@ export interface RunEvent {
   createdAt: string;
 }
 
+export interface RunLog {
+  runId: string;
+  store: string;
+  logRef: string;
+  content: string; // JSONL - each line: {"ts":"...","stream":"stdout"|"stderr"|"system","chunk":"..."}
+  nextOffset?: number;
+}
+
 export interface Agent {
   id: string;
   name: string;
@@ -219,4 +227,5 @@ export const api = {
     }),
   getRunPromptSnapshot: (id: string) => fetchJson<any>(`/runs/${id}/prompt-snapshot`),
   getRunEvents: (id: string) => fetchJson<RunEvent[]>(`/runs/${id}/events`),
+  getRunLog: (id: string) => fetchJson<RunLog>(`/runs/${id}/log`),
 };

@@ -67,3 +67,20 @@ runsRoute.get("/:id/events", async (c) => {
 
   return c.json(rows);
 });
+
+// GET /api/runs/:id/log - 바톤 서버 실행 로그 proxy
+runsRoute.get("/:id/log", async (c) => {
+  const id = c.req.param("id");
+  const offset = c.req.query("offset") ?? "0";
+  const limitBytes = c.req.query("limitBytes") ?? "512000";
+
+  const res = await fetch(
+    `http://127.0.0.1:3100/api/heartbeat-runs/${id}/log?offset=${encodeURIComponent(offset)}&limitBytes=${encodeURIComponent(limitBytes)}`,
+    { headers: { Authorization: "Bearer test" } }
+  );
+
+  if (!res.ok) return c.json({ error: "Run log not found" }, 404);
+
+  const data = await res.json();
+  return c.json(data);
+});
