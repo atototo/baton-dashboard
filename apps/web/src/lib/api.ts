@@ -1,7 +1,13 @@
 const BASE = "/api";
 
-async function fetchJson<T>(path: string): Promise<T> {
-  const res = await fetch(`${BASE}${path}`);
+async function fetchJson<T>(path: string, options?: RequestInit): Promise<T> {
+  const res = await fetch(`${BASE}${path}`, {
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options?.headers,
+    },
+  });
   if (!res.ok) throw new Error(`API error: ${res.status}`);
   return res.json();
 }
@@ -36,6 +42,15 @@ export interface Issue {
   agentName: string | null;
   agentIcon: string | null;
   projectName: string | null;
+}
+
+export interface IssueCreatePayload {
+  companyId: string;
+  title: string;
+  description?: string;
+  priority?: string;
+  projectId?: string;
+  assigneeAgentId?: string;
 }
 
 export interface Agent {
@@ -78,6 +93,12 @@ export const api = {
   getIssues: (params?: Record<string, string>) => {
     const qs = params ? "?" + new URLSearchParams(params).toString() : "";
     return fetchJson<Issue[]>(`/issues${qs}`);
+  },
+  createIssue: (payload: IssueCreatePayload) => {
+    return fetchJson<Issue>("/issues", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
   },
   getAgents: (companyId?: string) => {
     const qs = companyId ? `?companyId=${companyId}` : "";
