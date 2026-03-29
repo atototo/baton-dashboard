@@ -1,10 +1,13 @@
+import { Link } from "react-router-dom";
 import type { Issue } from "../lib/api";
 
 const STATUS_COLORS: Record<string, string> = {
   backlog: "bg-gray-100 text-gray-700",
+  todo: "bg-gray-100 text-gray-700",
   in_progress: "bg-blue-100 text-blue-700",
   in_review: "bg-yellow-100 text-yellow-700",
   completed: "bg-green-100 text-green-700",
+  done: "bg-green-100 text-green-700",
   cancelled: "bg-red-100 text-red-700",
 };
 
@@ -15,9 +18,11 @@ const PRIORITY_ICONS: Record<string, string> = {
   low: "🟢",
 };
 
-function timeAgo(dateStr: string): string {
+function timeAgo(dateStr: string | null): string {
+  if (!dateStr) return "—";
   const diff = Date.now() - new Date(dateStr).getTime();
   const mins = Math.floor(diff / 60000);
+  if (mins < 1) return "just now";
   if (mins < 60) return `${mins}m ago`;
   const hours = Math.floor(mins / 60);
   if (hours < 24) return `${hours}h ago`;
@@ -32,37 +37,58 @@ interface IssueListProps {
 export function IssueList({ issues }: IssueListProps) {
   if (issues.length === 0) {
     return (
-      <div className="text-center py-12 text-gray-400">
-        No issues yet. Create one in Baton to see it here.
+      <div className="text-center py-12 text-gray-400 bg-white border rounded-xl shadow-sm">
+        No issues found.
       </div>
     );
   }
 
   return (
-    <div className="divide-y divide-gray-100">
-      {issues.map((issue) => (
-        <div key={issue.id} className="flex items-center gap-3 py-3 px-2 hover:bg-gray-50 rounded">
-          <span className="text-sm">{PRIORITY_ICONS[issue.priority] ?? "⚪"}</span>
-          <span className="text-xs text-gray-400 font-mono w-20 shrink-0">
-            {issue.identifier ?? "—"}
-          </span>
-          <span
-            className={`text-xs px-2 py-0.5 rounded-full font-medium w-24 text-center shrink-0 ${STATUS_COLORS[issue.status] ?? "bg-gray-100 text-gray-600"}`}
+    <div className="bg-white border rounded-xl shadow-sm overflow-hidden">
+      <div className="divide-y divide-gray-100">
+        {issues.map((issue) => (
+          <Link
+            key={issue.id}
+            to={`/issues/${issue.id}`}
+            className="flex items-center gap-4 py-4 px-6 hover:bg-gray-50 transition-colors group"
           >
-            {issue.status.replace(/_/g, " ")}
-          </span>
-          <span className="text-sm text-gray-800 truncate flex-1">{issue.title}</span>
-          {issue.agentName && (
-            <span className="text-xs text-gray-500 shrink-0">
-              {issue.agentIcon ?? "🤖"} {issue.agentName}
+            <span className="text-sm shrink-0" title={`Priority: ${issue.priority}`}>
+              {PRIORITY_ICONS[issue.priority] ?? "⚪"}
             </span>
-          )}
-          {issue.projectName && (
-            <span className="text-xs text-gray-400 shrink-0">{issue.projectName}</span>
-          )}
-          <span className="text-xs text-gray-400 shrink-0">{timeAgo(issue.updatedAt)}</span>
-        </div>
-      ))}
+            <div className="w-20 shrink-0">
+              <span className="text-xs font-black text-gray-300 group-hover:text-blue-400 transition-colors font-mono tracking-tighter uppercase">
+                {issue.identifier ?? "—"}
+              </span>
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="text-sm font-bold text-gray-900 truncate group-hover:text-blue-600 transition-colors">
+                {issue.title}
+              </div>
+            </div>
+            <div className="flex items-center gap-3 shrink-0">
+              <span
+                className={`text-[10px] px-2.5 py-0.5 rounded-full font-black uppercase tracking-widest ${STATUS_COLORS[issue.status] ?? "bg-gray-100 text-gray-600"}`}
+              >
+                {issue.status.replace(/_/g, " ")}
+              </span>
+              {issue.agentName && (
+                <div className="flex items-center gap-1.5 px-2 py-0.5 bg-gray-50 border border-gray-100 rounded text-[11px] font-bold text-gray-600">
+                  <span>{issue.agentIcon ?? "🤖"}</span>
+                  <span className="truncate max-w-[80px]">{issue.agentName}</span>
+                </div>
+              )}
+              {issue.projectName && (
+                <span className="text-[10px] font-black text-gray-400 uppercase tracking-tighter hidden md:block">
+                  {issue.projectName}
+                </span>
+              )}
+              <span className="text-[10px] font-medium text-gray-400 w-16 text-right">
+                {timeAgo(issue.updatedAt)}
+              </span>
+            </div>
+          </Link>
+        ))}
+      </div>
     </div>
   );
 }

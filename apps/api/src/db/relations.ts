@@ -1,5 +1,5 @@
 import { relations } from "drizzle-orm/relations";
-import { agents, agentApiKeys, companies, approvals, costEvents, issues, projects, goals, issueComments, heartbeatRuns, agentWakeupRequests, agentRuntimeState, heartbeatRunEvents, activityLog, approvalComments, agentConfigRevisions, agentTaskSessions, companySecrets, companySecretVersions, assets, issueAttachments, user, account, session, companyMemberships, invites, principalPermissionGrants, labels, projectWorkspaces, joinRequests, executionWorkspaces, projectConventions, issueLabels, projectGoals, issueApprovals } from "./schema";
+import { agents, agentApiKeys, companies, approvals, costEvents, issues, projects, goals, issueComments, heartbeatRuns, agentWakeupRequests, agentRuntimeState, heartbeatRunEvents, activityLog, approvalComments, agentConfigRevisions, agentTaskSessions, companySecrets, companySecretVersions, assets, issueAttachments, user, account, session, companyMemberships, invites, principalPermissionGrants, labels, projectWorkspaces, joinRequests, executionWorkspaces, projectConventions, issueLabels, projectGoals, issueApprovals } from "./schema.js";
 
 export const agentApiKeysRelations = relations(agentApiKeys, ({one}) => ({
 	agent: one(agents, {

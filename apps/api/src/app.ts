@@ -5,6 +5,7 @@ import { agentsRoute } from "./routes/agents.js";
 import { projectsRoute } from "./routes/projects.js";
 import { companiesRoute } from "./routes/companies.js";
 import { statsRoute } from "./routes/stats.js";
+import { runsRoute } from "./routes/runs.js";
 
 export const app = new Hono();
 
@@ -17,3 +18,4 @@ app.route("/api/issues", issuesRoute);
 app.route("/api/agents", agentsRoute);
 app.route("/api/projects", projectsRoute);
 app.route("/api/stats", statsRoute);
+app.route("/api/runs", runsRoute);
