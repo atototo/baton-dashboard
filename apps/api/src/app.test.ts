@@ -1,6 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
+import { readFile } from "node:fs/promises";
+import { fileURLToPath } from "node:url";
+import { dirname, resolve } from "node:path";
+import { spawnSync } from "node:child_process";
 import { eq } from "drizzle-orm";
 
 process.env.DATABASE_URL ??= "postgres://baton:baton@localhost:5432/baton";
@@ -9,6 +13,8 @@ const { app } = await import("./app.js");
 const { closeDb, db, schema } = await import("./db/index.js");
 
 const missingCompanyId = "00000000-0000-0000-0000-000000000000";
+const srcDir = dirname(fileURLToPath(import.meta.url));
+const apiDir = resolve(srcDir, "..");
 
 test("GET /api/companies returns active companies", async () => {
   const response = await app.request("/api/companies");
@@ -112,6 +118,19 @@ test("POST /api/issues returns 400 when companyId or title is missing", async ()
   });
 
   assert.equal(response.status, 400);
+});
+
+test("build output keeps runtime-safe .js extension for db relations schema import", async () => {
+  const build = spawnSync("pnpm", ["build"], {
+    cwd: apiDir,
+    encoding: "utf8",
+  });
+
+  assert.equal(build.status, 0, build.stderr || build.stdout);
+
+  const builtRelations = await readFile(resolve(apiDir, "dist/db/relations.js"), "utf8");
+
+  assert.match(builtRelations, /from "\.\/schema\.js";/);
 });
 
 test.after(async () => {
