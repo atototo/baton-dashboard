@@ -15,6 +15,7 @@ const getIssueByIdentifier = async () => {
     .select({
       id: schema.issues.id,
       companyId: schema.issues.companyId,
+      projectId: schema.issues.projectId,
     })
     .from(schema.issues)
     .where(eq(schema.issues.identifier, issueIdentifier))
@@ -93,6 +94,129 @@ test("GET /api/issues/:id/comments returns the issue comment thread", async () =
   assert.ok(comments.length > 0);
   assert.equal(comments[0].issueId, issue.id);
   assert.equal(typeof comments[0].body, "string");
+});
+
+test("GET /api/issues/stats/summary filters by companyId and projectId", async () => {
+  const issue = await getIssueByIdentifier();
+
+  const expected = await db
+    .select({
+      status: schema.issues.status,
+      count: sql<number>`count(*)::int`,
+    })
+    .from(schema.issues)
+    .where(
+      sql`${schema.issues.hiddenAt} is null
+        and ${schema.issues.companyId} = ${issue.companyId}
+        and ${schema.issues.projectId} = ${issue.projectId}`,
+    )
+    .groupBy(schema.issues.status);
+
+  const response = await app.request(
+    `/api/issues/stats/summary?companyId=${issue.companyId}&projectId=${issue.projectId}`,
+  );
+
+  assert.equal(response.status, 200);
+
+  const summary = await response.json();
+  assert.deepEqual(
+    summary.sort((left: { status: string }, right: { status: string }) => left.status.localeCompare(right.status)),
+    expected.sort((left, right) => left.status.localeCompare(right.status)),
+  );
+});
+
+test("GET /api/issues filters the list by projectId", async () => {
+  const issue = await getIssueByIdentifier();
+
+  const response = await app.request(`/api/issues?projectId=${issue.projectId}`);
+
+  assert.equal(response.status, 200);
+
+  const issues = await response.json();
+  assert.ok(Array.isArray(issues));
+  assert.ok(issues.length > 0);
+  assert.ok(
+    issues.every((row: { projectId: string | null }) => row.projectId === issue.projectId),
+    "every returned issue should belong to the requested project",
+  );
+});
+
+test("PATCH /api/issues/:id updates the issue status", async () => {
+  const issue = await getIssueByIdentifier();
+  const [before] = await db
+    .select({
+      status: schema.issues.status,
+    })
+    .from(schema.issues)
+    .where(eq(schema.issues.id, issue.id))
+    .limit(1);
+
+  assert.ok(before, "issue should exist before patching");
+
+  const nextStatus = before.status === "in_progress" ? "todo" : "in_progress";
+
+  const response = await app.request(`/api/issues/${issue.id}`, {
+    method: "PATCH",
+    headers: {
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({
+      status: nextStatus,
+    }),
+  });
+
+  assert.equal(response.status, 200);
+
+  const updated = await response.json();
+  assert.equal(updated.id, issue.id);
+  assert.equal(updated.status, nextStatus);
+
+  const [stored] = await db
+    .select({
+      status: schema.issues.status,
+    })
+    .from(schema.issues)
+    .where(eq(schema.issues.id, issue.id))
+    .limit(1);
+
+  assert.equal(stored?.status, nextStatus);
+
+  await db
+    .update(schema.issues)
+    .set({
+      status: before.status,
+      updatedAt: sql`now()`,
+    })
+    .where(eq(schema.issues.id, issue.id));
+});
+
+test("GET /api/projects/:id/stats returns total and status counts for the project", async () => {
+  const issue = await getIssueByIdentifier();
+
+  const expected = await db
+    .select({
+      status: schema.issues.status,
+      count: sql<number>`count(*)::int`,
+    })
+    .from(schema.issues)
+    .where(
+      sql`${schema.issues.hiddenAt} is null
+        and ${schema.issues.projectId} = ${issue.projectId}`,
+    )
+    .groupBy(schema.issues.status);
+
+  const response = await app.request(`/api/projects/${issue.projectId}/stats`);
+
+  assert.equal(response.status, 200);
+
+  const stats = await response.json();
+  assert.equal(stats.total, expected.reduce((sum, row) => sum + row.count, 0));
+  assert.deepEqual(
+    Object.entries(stats.byStatus).sort(([left], [right]) => left.localeCompare(right)),
+    expected
+      .map((row) => [row.status, row.count] as const)
+      .sort(([left], [right]) => left.localeCompare(right)),
+  );
 });
 
 test("POST /api/issues/:id/comments creates a new issue comment", async () => {

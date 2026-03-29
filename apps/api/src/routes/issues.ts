@@ -40,13 +40,20 @@ const issueSummarySelect = {
 
 // GET /api/issues/stats/summary - 이슈 통계
 issuesRoute.get("/stats/summary", async (c) => {
+  const projectId = c.req.query("projectId");
+  const companyId = c.req.query("companyId");
+
+  const conditions = [isNull(schema.issues.hiddenAt)];
+  if (projectId) conditions.push(eq(schema.issues.projectId, projectId));
+  if (companyId) conditions.push(eq(schema.issues.companyId, companyId));
+
   const result = await db
     .select({
       status: schema.issues.status,
       count: count(),
     })
     .from(schema.issues)
-    .where(isNull(schema.issues.hiddenAt))
+    .where(and(...conditions))
     .groupBy(schema.issues.status);
 
   return c.json(result);
@@ -291,5 +298,41 @@ issuesRoute.get("/:id", async (c) => {
     .limit(1);
 
   if (!row) return c.json({ error: "Not found" }, 404);
+  return c.json(row);
+});
+
+// PATCH /api/issues/:id - 이슈 상태 수정
+issuesRoute.patch("/:id", async (c) => {
+  const id = c.req.param("id");
+  const payload = await c.req.json().catch(() => null);
+  const status = typeof payload?.status === "string" ? payload.status.trim() : "";
+
+  if (!status) {
+    return c.json({ error: "status is required" }, 400);
+  }
+
+  const [updatedIssue] = await db
+    .update(schema.issues)
+    .set({
+      status,
+      updatedAt: sql`now()`,
+    })
+    .where(eq(schema.issues.id, id))
+    .returning({
+      id: schema.issues.id,
+    });
+
+  if (!updatedIssue) {
+    return c.json({ error: "Not found" }, 404);
+  }
+
+  const [row] = await db
+    .select(issueSummarySelect)
+    .from(schema.issues)
+    .leftJoin(schema.agents, eq(schema.issues.assigneeAgentId, schema.agents.id))
+    .leftJoin(schema.projects, eq(schema.issues.projectId, schema.projects.id))
+    .where(eq(schema.issues.id, id))
+    .limit(1);
+
   return c.json(row);
 });

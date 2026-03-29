@@ -1,36 +1,61 @@
 import { useEffect, useState } from "react";
-import { useParams, Link } from "react-router-dom";
-import { api, type Issue } from "../lib/api";
-import { IssueTimeline } from "../components/IssueTimeline";
-import { CommentThread } from "../components/CommentThread";
-import { IssueList } from "../components/IssueList";
+import { useParams, Link, useLocation } from "react-router-dom";
+import { api, type Issue } from "../lib/api.js";
+import { IssueTimeline } from "../components/IssueTimeline.js";
+import { CommentThread } from "../components/CommentThread.js";
+import { IssueList } from "../components/IssueList.js";
 
 type Tab = "details" | "comments" | "timeline" | "subtasks";
 
 export function IssueDetail() {
   const { id } = useParams<{ id: string }>();
-  const [issue, setIssue] = useState<Issue | null>(null);
+  const location = useLocation();
+  const [issue, setIssue] = useState<Issue | null>(location.state?.issue ?? null);
   const [subtasks, setSubtasks] = useState<Issue[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(!location.state?.issue);
   const [activeTab, setActiveTab] = useState<Tab>("details");
 
   useEffect(() => {
     if (!id) return;
-    setLoading(true);
     
-    Promise.all([
-      api.getIssue(id),
-      api.getIssues({ parentId: id })
-    ])
-      .then(([issueData, subtasksData]) => {
-        setIssue(issueData);
-        setSubtasks(subtasksData);
-      })
-      .catch(console.error)
-      .finally(() => setLoading(false));
+    const fetchIssueData = async () => {
+      setLoading(true);
+      try {
+        let issueData = issue;
+        
+        // If we don't have the issue in state, or if the ID changed
+        if (!issueData || (issueData.id !== id && issueData.identifier !== id)) {
+          try {
+            // Try fetching by ID first
+            issueData = await api.getIssue(id);
+          } catch (e) {
+            // If fetching by ID fails (404 for identifier), try fetching all issues and filtering
+            const allIssues = await api.getIssues({ limit: "100" });
+            const found = allIssues.find(i => i.identifier === id);
+            if (found) {
+              issueData = found;
+            } else {
+              throw e;
+            }
+          }
+        }
+        
+        if (issueData) {
+          setIssue(issueData);
+          const subtasksData = await api.getIssues({ parentId: issueData.id });
+          setSubtasks(subtasksData);
+        }
+      } catch (error) {
+        console.error("Failed to load issue:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchIssueData();
   }, [id]);
 
-  if (loading) {
+  if (loading && !issue) {
     return (
       <div className="flex items-center justify-center h-full min-h-[400px]">
         <div className="flex flex-col items-center gap-4">

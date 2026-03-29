@@ -1,12 +1,15 @@
 import { Link } from "react-router-dom";
-import { api } from "../lib/api";
-import { useQuery } from "../hooks/useQuery";
-import { useCompany } from "../context/CompanyContext";
+import { api } from "../lib/api.js";
+import { useQuery } from "../hooks/useQuery.js";
+import { useCompany } from "../context/CompanyContext.js";
 
 const STATUS_STYLE: Record<string, string> = {
+  backlog: "text-gray-600 bg-gray-50 border-gray-200",
   active: "text-green-600 bg-green-50 border-green-200",
   in_progress: "text-blue-600 bg-blue-50 border-blue-200",
-  completed: "text-gray-600 bg-gray-50 border-gray-200",
+  in_review: "text-yellow-600 bg-yellow-50 border-yellow-200",
+  done: "text-green-600 bg-green-50 border-green-200",
+  completed: "text-green-600 bg-green-50 border-green-200",
 };
 
 export function ProjectList() {

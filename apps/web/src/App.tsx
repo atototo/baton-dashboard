@@ -1,12 +1,13 @@
 import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
-import { CompanyProvider } from "./context/CompanyContext";
-import { Layout } from "./components/Layout";
-import { DashboardHome } from "./pages/DashboardHome";
-import { ProjectList } from "./pages/ProjectList";
-import { AgentListPage } from "./pages/AgentListPage";
-import { IssueListPage } from "./pages/IssueListPage";
-import { IssueDetail } from "./pages/IssueDetail";
-import { Monitoring } from "./pages/Monitoring";
+import { CompanyProvider } from "./context/CompanyContext.js";
+import { Layout } from "./components/Layout.js";
+import { DashboardHome } from "./pages/DashboardHome.js";
+import { ProjectList } from "./pages/ProjectList.js";
+import { ProjectDetail } from "./pages/ProjectDetail.js";
+import { AgentListPage } from "./pages/AgentListPage.js";
+import { IssueListPage } from "./pages/IssueListPage.js";
+import { IssueDetail } from "./pages/IssueDetail.js";
+import { Monitoring } from "./pages/Monitoring.js";
 
 function App() {
   return (
@@ -18,7 +19,8 @@ function App() {
             <Route path="issues" element={<IssueListPage />} />
             <Route path="issues/:id" element={<IssueDetail />} />
             <Route path="projects" element={<ProjectList />} />
-            <Route path="projects/:id" element={<ProjectList />} />
+            <Route path="projects/:id" element={<ProjectDetail />} />
+            <Route path="projects/:id/:tab" element={<ProjectDetail />} />
             <Route path="agents" element={<AgentListPage />} />
             <Route path="agents/:id" element={<AgentListPage />} />
             <Route path="monitoring" element={<Monitoring />} />
