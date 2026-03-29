@@ -258,28 +258,34 @@ function parseLog(content: string): LogEntry[] {
 
 // --- Helpers ---
 
+function fmtTokens(n: number): string {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}k`;
+  return String(n);
+}
+
 function Timestamp({ ts }: { ts: string }) {
   const t = new Date(ts).toLocaleTimeString("ko-KR", {
     hour12: false, hour: "2-digit", minute: "2-digit", second: "2-digit",
   });
-  return <span className="text-[11px] text-gray-400 font-mono shrink-0 w-16">{t}</span>;
+  return <span className="text-[10px] text-gray-500 font-mono shrink-0 w-14">{t}</span>;
 }
 
-function ExpandButton({ expanded, onClick }: { expanded: boolean; onClick: () => void }) {
+function ExpandBtn({ expanded, onClick }: { expanded: boolean; onClick: () => void }) {
   return (
     <button
       onClick={onClick}
-      className="text-[10px] text-gray-400 hover:text-gray-600 font-mono px-1.5 py-0.5 rounded hover:bg-gray-100 transition-colors shrink-0"
+      className="text-[10px] text-gray-400 hover:text-gray-600 font-mono px-1 rounded transition-colors shrink-0"
     >
-      {expanded ? "▼ 접기" : "▶ 펼치기"}
+      {expanded ? "▼" : "▶ 펼치기"}
     </button>
   );
 }
 
-const TOOL_ICONS: Record<string, string> = {
-  command_execution: "⚡", bash: "⚡",
-  str_replace_based_edit_tool: "✏️", str_replace_editor: "✏️", edit_file: "✏️",
-  read_file: "📖", write_file: "📝", computer: "🖥️",
+const TOOL_NAME_SHORT: Record<string, string> = {
+  command_execution: "EXEC", bash: "BASH",
+  str_replace_based_edit_tool: "EDIT", str_replace_editor: "EDIT", edit_file: "EDIT",
+  read_file: "READ", write_file: "WRITE", computer: "COMPUTER",
 };
 
 function getInputSummary(_name: string, input: string): string {
@@ -288,7 +294,7 @@ function getInputSummary(_name: string, input: string): string {
     if (typeof parsed.command === "string") return parsed.command;
     if (typeof parsed.path === "string") return parsed.path;
     if (typeof parsed.file_path === "string") return parsed.file_path;
-    if (typeof parsed.old_string === "string") return parsed.old_string.slice(0, 200);
+    if (typeof parsed.old_string === "string") return parsed.old_string.slice(0, 300);
     return input;
   } catch {
     return input;
@@ -302,72 +308,57 @@ function TraceEntry({ entry }: { entry: LogEntry }) {
 
   if (entry.kind === "system") {
     return (
-      <div className="flex items-start gap-3 py-1">
+      <div className="flex items-start gap-2 py-0.5">
         <Timestamp ts={entry.ts} />
-        <span className="text-xs text-blue-600 font-mono leading-relaxed">{entry.message}</span>
+        <span className="text-[11px] text-blue-600 font-mono leading-relaxed break-all">{entry.message}</span>
       </div>
     );
   }
 
   if (entry.kind === "stderr") {
     return (
-      <div className="flex items-start gap-3 py-1">
+      <div className="flex items-start gap-2 py-0.5">
         <Timestamp ts={entry.ts} />
-        <span className="text-xs text-red-600 font-mono leading-relaxed">{entry.message}</span>
+        <span className="text-[11px] text-red-500 font-mono leading-relaxed break-all">{entry.message}</span>
       </div>
     );
   }
 
   if (entry.kind === "assistant") {
     return (
-      <div className="my-2 border-l-4 border-violet-400 bg-violet-50 rounded-r-xl p-3">
-        <div className="flex items-center gap-2 mb-1.5">
+      <div className="my-1.5 border-l-2 border-violet-400 pl-3 py-1.5 bg-violet-50 rounded-r">
+        <div className="flex items-center gap-2 mb-1">
           <Timestamp ts={entry.ts} />
-          <span className="text-xs font-bold text-violet-700 uppercase tracking-tight">🤖 에이전트</span>
+          <span className="text-[10px] font-bold text-violet-600 uppercase tracking-wide">Agent</span>
         </div>
-        <p className="text-sm text-gray-800 leading-relaxed whitespace-pre-wrap font-medium">{entry.text}</p>
+        <p className="text-xs text-gray-700 leading-relaxed whitespace-pre-wrap">{entry.text}</p>
       </div>
     );
   }
 
   if (entry.kind === "thinking") {
     return (
-      <div className="my-1 border-l-4 border-amber-300 bg-amber-50 rounded-r-xl p-3">
-        <div className="flex items-center gap-2 mb-1.5">
+      <div className="my-1 border-l-2 border-amber-400 pl-3 py-1 bg-amber-50 rounded-r">
+        <div className="flex items-center gap-2">
           <Timestamp ts={entry.ts} />
-          <span className="text-xs font-bold text-amber-700 uppercase tracking-tight">💭 추론</span>
-          <ExpandButton expanded={expanded} onClick={() => setExpanded((v) => !v)} />
+          <span className="text-[10px] font-bold text-amber-600 uppercase tracking-wide">Thinking</span>
+          <ExpandBtn expanded={expanded} onClick={() => setExpanded((v) => !v)} />
         </div>
         {expanded && (
-          <p className="text-xs text-amber-900 leading-relaxed whitespace-pre-wrap font-mono">{entry.text}</p>
+          <p className="text-[11px] text-amber-800 leading-relaxed whitespace-pre-wrap font-mono mt-1">{entry.text}</p>
         )}
       </div>
     );
   }
 
   if (entry.kind === "turn_summary") {
-    const costStr = entry.cost != null ? ` · $${entry.cost.toFixed(4)}` : "";
-    const durStr = entry.durationMs != null ? ` · ${(entry.durationMs / 1000).toFixed(1)}s` : "";
-    return (
-      <div className="flex items-center gap-3 py-1.5 px-3 bg-gray-50 rounded-xl border border-gray-100 my-1">
-        <Timestamp ts={entry.ts} />
-        <span className="text-sm">📊</span>
-        <span className="text-xs font-mono text-gray-600">
-          in: <strong>{entry.inputTokens.toLocaleString()}</strong>
-          &nbsp;·&nbsp;
-          out: <strong>{entry.outputTokens.toLocaleString()}</strong>
-          {costStr && <span className="text-gray-400">{costStr}</span>}
-          {durStr && <span className="text-gray-400">{durStr}</span>}
-        </span>
-      </div>
-    );
+    return null;
   }
 
   if (entry.kind === "tool_call") {
-    const icon = TOOL_ICONS[entry.name] ?? "🔧";
+    const shortName = TOOL_NAME_SHORT[entry.name] ?? entry.name.toUpperCase();
     const summary = getInputSummary(entry.name, entry.input);
 
-    // Only show expand when there are multiple meaningful fields beyond the summary
     let parsedInput: Record<string, unknown> | null = null;
     let fullInput = entry.input;
     try {
@@ -375,40 +366,24 @@ function TraceEntry({ entry }: { entry: LogEntry }) {
       fullInput = JSON.stringify(parsedInput, null, 2);
     } catch { /* keep as-is */ }
 
-    // Has extra fields worth expanding? (more than just command/path/file_path)
     const extraFields = parsedInput
       ? Object.keys(parsedInput).filter((k) => !["command", "path", "file_path"].includes(k))
       : [];
     const hasExtra = extraFields.length > 0;
 
     return (
-      <div className="my-1 border border-gray-200 rounded-xl overflow-hidden shadow-sm">
-        {/* Header row */}
-        <div className="flex items-start gap-2 px-3 py-2.5 bg-white">
+      <div className="my-1 rounded overflow-hidden border border-gray-200">
+        <div className="flex items-start gap-2 px-2.5 py-2 bg-gray-50">
           <Timestamp ts={entry.ts} />
-          <span className="text-sm shrink-0 mt-0.5">{icon}</span>
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2 flex-wrap mb-1">
-              <span className="text-xs font-black text-gray-800 uppercase tracking-tight">{entry.name}</span>
-              {hasExtra && (
-                <span className="text-[10px] text-gray-400 font-mono">
-                  +{extraFields.join(", ")}
-                </span>
-              )}
-            </div>
-            {/* Full command — wrapped, not truncated */}
-            <pre className="text-xs text-gray-700 font-mono whitespace-pre-wrap break-words leading-relaxed bg-gray-50 rounded-lg p-2 mt-1">
-              {summary}
-            </pre>
-          </div>
-          {hasExtra && (
-            <ExpandButton expanded={expanded} onClick={() => setExpanded((v) => !v)} />
-          )}
+          <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100 border border-emerald-200 px-1.5 py-0.5 rounded font-mono shrink-0 mt-0.5">{shortName}</span>
+          <pre className="text-[11px] text-gray-800 font-mono whitespace-pre-wrap break-all leading-snug flex-1 min-w-0">
+            {summary}
+          </pre>
+          {hasExtra && <ExpandBtn expanded={expanded} onClick={() => setExpanded((v) => !v)} />}
         </div>
-        {/* Expanded extra fields */}
         {expanded && hasExtra && (
-          <div className="border-t border-gray-100 bg-slate-950 p-3">
-            <pre className="text-xs text-green-400 font-mono whitespace-pre-wrap break-words leading-relaxed">
+          <div className="border-t border-gray-200 bg-white px-3 py-2">
+            <pre className="text-[11px] text-gray-700 font-mono whitespace-pre-wrap break-all leading-snug">
               {fullInput}
             </pre>
           </div>
@@ -422,41 +397,33 @@ function TraceEntry({ entry }: { entry: LogEntry }) {
     const isEmpty = !entry.output.trim();
     const exitLabel = entry.exitCode !== undefined ? `exit:${entry.exitCode}` : "";
 
-    // Empty successful result — compact
     if (!isErr && isEmpty) {
       return (
-        <div className="flex items-center gap-3 py-1 pl-1">
+        <div className="flex items-center gap-2 py-0.5 pl-0.5">
           <Timestamp ts={entry.ts} />
-          <span className="text-sm">✅</span>
-          {exitLabel && <span className="text-xs font-bold text-emerald-700 font-mono">{exitLabel}</span>}
-          <span className="text-xs text-gray-400 italic">출력 없음</span>
+          <span className="text-[10px] font-bold text-emerald-600 font-mono">{exitLabel || "exit:0"}</span>
         </div>
       );
     }
 
     const isLong = entry.output.length > 800;
     return (
-      <div className={`my-1 border rounded-xl overflow-hidden shadow-sm ${isErr ? "border-red-200" : "border-gray-200"}`}>
-        <div className={`flex items-start gap-2 px-3 py-2.5 ${isErr ? "bg-red-50" : "bg-white"}`}>
+      <div className={`my-0.5 rounded overflow-hidden border ${isErr ? "border-red-200" : "border-gray-200"}`}>
+        <div className={`flex items-start gap-2 px-2.5 py-2 ${isErr ? "bg-red-50" : "bg-white"}`}>
           <Timestamp ts={entry.ts} />
-          <span className="text-sm shrink-0">{isErr ? "❌" : "✅"}</span>
+          <span className={`text-[10px] font-bold font-mono shrink-0 mt-0.5 ${isErr ? "text-red-600" : "text-emerald-600"}`}>
+            {exitLabel || (isErr ? "error" : "exit:0")}
+          </span>
           <div className="flex-1 min-w-0">
-            {exitLabel && (
-              <span className={`text-xs font-black font-mono ${isErr ? "text-red-700" : "text-emerald-700"}`}>
-                {exitLabel}
-              </span>
-            )}
             {entry.output.trim() && (
-              <pre className={`text-xs font-mono whitespace-pre-wrap break-words leading-relaxed mt-1 p-2 rounded-lg overflow-y-auto ${
-                isErr ? "bg-red-50 text-red-800" : "bg-gray-50 text-gray-700"
-              } ${isLong && !expanded ? "max-h-48" : ""}`}>
+              <pre className={`text-[11px] font-mono whitespace-pre-wrap break-all leading-snug no-scrollbar ${
+                isErr ? "text-red-700" : "text-gray-700"
+              } ${isLong && !expanded ? "max-h-40 overflow-y-auto" : ""}`}>
                 {entry.output}
               </pre>
             )}
           </div>
-          {isLong && (
-            <ExpandButton expanded={expanded} onClick={() => setExpanded((v) => !v)} />
-          )}
+          {isLong && <ExpandBtn expanded={expanded} onClick={() => setExpanded((v) => !v)} />}
         </div>
       </div>
     );
@@ -464,9 +431,9 @@ function TraceEntry({ entry }: { entry: LogEntry }) {
 
   if (entry.kind === "raw" && entry.text.trim()) {
     return (
-      <div className="flex items-start gap-3 py-1">
+      <div className="flex items-start gap-2 py-0.5">
         <Timestamp ts={entry.ts} />
-        <span className="text-xs text-gray-500 font-mono leading-relaxed whitespace-pre-wrap break-words">{entry.text}</span>
+        <span className="text-[11px] text-gray-500 font-mono leading-relaxed whitespace-pre-wrap break-all">{entry.text}</span>
       </div>
     );
   }
@@ -501,9 +468,9 @@ export function RunTrace({ runId }: RunTraceProps) {
 
   if (loading) {
     return (
-      <div className="flex items-center gap-2 py-8 text-gray-400">
-        <div className="w-4 h-4 border-2 border-gray-200 border-t-gray-400 rounded-full animate-spin" />
-        <span className="text-sm font-medium">로그 로딩 중…</span>
+      <div className="flex items-center gap-2 py-6 text-gray-400">
+        <div className="w-3 h-3 border-2 border-gray-200 border-t-gray-400 rounded-full animate-spin" />
+        <span className="text-xs">로딩 중…</span>
       </div>
     );
   }
@@ -523,81 +490,95 @@ export function RunTrace({ runId }: RunTraceProps) {
   const adapterType = adapterPayload?.adapterType as string | undefined;
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-2">
+      {/* Token stats card — prominent, like baton's run header */}
+      {turnSummary && (
+        <div className="flex items-stretch border border-gray-200 rounded-lg overflow-hidden mb-3">
+          {/* Left: token grid */}
+          <div className="grid grid-cols-2 divide-x divide-gray-100 flex-1">
+            <div className="px-4 py-2.5">
+              <div className="text-[10px] text-gray-400 mb-0.5">입력</div>
+              <div className="text-base font-bold text-gray-900 font-mono">{fmtTokens(turnSummary.inputTokens)}</div>
+            </div>
+            <div className="px-4 py-2.5">
+              <div className="text-[10px] text-gray-400 mb-0.5">출력</div>
+              <div className="text-base font-bold text-gray-900 font-mono">{fmtTokens(turnSummary.outputTokens)}</div>
+            </div>
+            {(turnSummary.cost != null || turnSummary.durationMs != null) && (
+              <>
+                <div className="px-4 py-2.5">
+                  <div className="text-[10px] text-gray-400 mb-0.5">소요 시간</div>
+                  <div className="text-base font-bold text-gray-900 font-mono">
+                    {turnSummary.durationMs != null ? `${(turnSummary.durationMs / 1000).toFixed(1)}s` : "–"}
+                  </div>
+                </div>
+                <div className="px-4 py-2.5">
+                  <div className="text-[10px] text-gray-400 mb-0.5">비용</div>
+                  <div className="text-base font-bold text-gray-900 font-mono">
+                    {turnSummary.cost != null ? `$${turnSummary.cost.toFixed(4)}` : "–"}
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+          {/* Right: prompt toggle */}
+          {prompt && (
+            <button
+              onClick={() => setShowContext((v) => !v)}
+              className="px-3 flex flex-col items-center justify-center gap-1 border-l border-gray-100 bg-gray-50 hover:bg-gray-100 transition-colors min-w-[80px]"
+            >
+              <span className="text-[9px] text-gray-400 uppercase tracking-wider">프롬프트</span>
+              {wakeReason && <span className="text-[9px] bg-white border border-gray-200 px-1.5 py-0.5 rounded font-mono text-gray-500">{wakeReason}</span>}
+              <span className="text-[9px] text-gray-400">{(prompt.length / 1000).toFixed(1)}k자</span>
+              <span className="text-[10px] text-gray-400">{showContext ? "▼" : "▶"}</span>
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Prompt toggle when no token summary (token summary already embeds the button) */}
+      {!turnSummary && prompt && (
+        <button
+          onClick={() => setShowContext((v) => !v)}
+          className="flex items-center gap-2 text-[11px] text-gray-400 hover:text-gray-600 transition-colors mb-1"
+        >
+          {wakeReason && <span className="bg-gray-100 px-1.5 py-0.5 rounded font-mono text-[10px]">{wakeReason}</span>}
+          {adapterType && <span className="font-mono">{adapterType}</span>}
+          <span>{(prompt.length / 1000).toFixed(1)}k자 프롬프트 {showContext ? "▼" : "▶"}</span>
+        </button>
+      )}
+
+      {/* Injected prompt */}
+      {showContext && prompt && (
+        <div className="border border-gray-200 rounded-lg overflow-hidden mb-2">
+          <div className="max-h-80 overflow-y-auto bg-gray-50">
+            <pre className="text-[11px] text-gray-700 font-mono whitespace-pre-wrap break-all leading-snug p-3">
+              {prompt}
+            </pre>
+          </div>
+        </div>
+      )}
+
       {/* Error banner */}
       {errors.length > 0 && (
-        <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3">
-          <div className="flex items-center gap-2 mb-2">
-            <span className="text-sm">❌</span>
-            <span className="text-xs font-black text-red-700 uppercase tracking-wide">
-              {errors.length}개 오류 감지됨
+        <div className="border border-red-200 bg-red-50 rounded-lg px-3 py-2 text-[11px] text-red-600 font-mono">
+          {errors.length}개 오류 ·&nbsp;
+          {errors.slice(0, 1).map((e, i) => (
+            <span key={i}>
+              {e.kind === "tool_result" ? e.output.slice(0, 120) : e.kind === "stderr" ? e.message.slice(0, 120) : ""}
             </span>
-          </div>
-          {errors.slice(0, 3).map((e, i) => (
-            <div key={i} className="text-xs text-red-600 font-mono leading-relaxed">
-              {e.kind === "tool_result"
-                ? `exit_code≠0: ${e.output.slice(0, 200)}`
-                : e.kind === "stderr" ? e.message.slice(0, 200) : ""}
-            </div>
           ))}
-        </div>
-      )}
-
-      {/* Token summary badge */}
-      {turnSummary && (
-        <div className="flex items-center gap-4 px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-mono text-gray-600">
-          <span className="text-sm">📊</span>
-          <span>in: <strong>{turnSummary.inputTokens.toLocaleString()}</strong></span>
-          <span>out: <strong>{turnSummary.outputTokens.toLocaleString()}</strong></span>
-          {turnSummary.cost != null && <span className="text-gray-400">${turnSummary.cost.toFixed(4)}</span>}
-          {turnSummary.durationMs != null && <span className="text-gray-400">{(turnSummary.durationMs / 1000).toFixed(1)}s</span>}
-        </div>
-      )}
-
-      {/* Context (injected prompt) */}
-      {prompt && (
-        <div className="border border-gray-200 rounded-xl overflow-hidden shadow-sm">
-          <button
-            onClick={() => setShowContext((v) => !v)}
-            className="w-full flex items-center justify-between px-4 py-2.5 bg-white hover:bg-gray-50 transition-colors"
-          >
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className="text-[10px] font-black text-gray-500 uppercase tracking-widest">컨텍스트 (주입된 프롬프트)</span>
-              {wakeReason && (
-                <span className="text-[10px] px-2 py-0.5 rounded bg-blue-50 text-blue-700 ring-1 ring-blue-200 font-mono">
-                  {wakeReason}
-                </span>
-              )}
-              {adapterType && <span className="text-[10px] text-gray-500 font-mono">{adapterType}</span>}
-              <span className="text-[10px] text-gray-400 font-mono">{prompt.length.toLocaleString()}자</span>
-            </div>
-            <span className="text-gray-400 text-[10px] font-mono shrink-0 ml-2">
-              {showContext ? "▼ 접기" : "▶ 펼치기"}
-            </span>
-          </button>
-          {showContext && (
-            <div className="border-t border-gray-100 max-h-96 overflow-y-auto bg-slate-950">
-              <pre className="text-xs text-green-400 font-mono whitespace-pre-wrap break-words leading-relaxed p-4">
-                {prompt}
-              </pre>
-            </div>
-          )}
         </div>
       )}
 
       {/* Execution trace */}
       {entries.length === 0 ? (
-        <div className="py-8 text-center text-gray-400 text-sm">실행 로그 없음</div>
+        <div className="py-6 text-center text-gray-400 text-xs">실행 로그 없음</div>
       ) : (
-        <div>
-          <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3">
-            실행 흐름 — {entries.length}개 이벤트
-          </div>
-          <div className="space-y-0.5">
-            {entries.map((entry, idx) => (
-              <TraceEntry key={idx} entry={entry} />
-            ))}
-          </div>
+        <div className="space-y-px">
+          {entries.map((entry, idx) => (
+            <TraceEntry key={idx} entry={entry} />
+          ))}
         </div>
       )}
     </div>

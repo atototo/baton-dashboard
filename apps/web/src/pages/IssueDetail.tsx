@@ -128,64 +128,62 @@ export function IssueDetail() {
   };
 
   return (
-    <div className="max-w-5xl mx-auto px-6 py-12 space-y-10">
-      {/* Header */}
-      <div className="space-y-6">
-        <div className="flex items-center gap-3 text-[10px] font-black uppercase tracking-[0.2em]">
-          <Link to="/issues" className="text-gray-400 hover:text-blue-600 transition-colors">Issues</Link>
-          <span className="text-gray-200">/</span>
+    <div className="flex flex-col -mx-8 -my-6 h-[calc(100vh-0px)] overflow-hidden">
+      {/* Breadcrumb + title + badges — compact single block */}
+      <div className="px-6 pt-4 pb-2 shrink-0">
+        <div className="flex items-center gap-1.5 text-[10px] font-mono text-gray-400 mb-1.5">
+          <Link to="/issues" className="hover:text-blue-600 transition-colors">Issues</Link>
+          <span>/</span>
           <span className="text-blue-600">{issue.identifier || issue.id.slice(0, 8)}</span>
         </div>
-        
-        <div className="flex flex-col gap-6">
-          <h1 className="text-4xl font-black text-gray-900 leading-[1.1] tracking-tight max-w-4xl">
-            {issue.title}
-          </h1>
-          
-          <div className="flex flex-wrap items-center gap-4">
-            <span className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest border ring-1 ring-inset ${
-              issue.status === "completed" || issue.status === "done" ? "bg-green-50 text-green-700 border-green-100 ring-green-500/10" :
-              issue.status === "in_progress" ? "bg-blue-50 text-blue-700 border-blue-100 ring-blue-500/10" :
-              "bg-gray-50 text-gray-600 border-gray-100 ring-gray-500/10"
-            }`}>
-              {issue.status.replace("_", " ")}
-            </span>
-            
-            <span className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest border ring-1 ring-inset ${
-              issue.priority === "urgent" || issue.priority === "high" ? "bg-red-50 text-red-700 border-red-100 ring-red-500/10" :
-              issue.priority === "medium" ? "bg-yellow-50 text-yellow-700 border-yellow-100 ring-yellow-500/10" :
-              "bg-gray-50 text-gray-600 border-gray-100 ring-gray-500/10"
-            }`}>
-              {issue.priority} priority
-            </span>
 
-            {issue.agentName && (
-              <div className="flex items-center gap-2 px-3 py-1.5 bg-gray-900 text-white rounded-lg shadow-sm">
-                <span className="text-base">{issue.agentIcon || "🤖"}</span>
-                <span className="text-[10px] font-black uppercase tracking-widest">{issue.agentName}</span>
-              </div>
-            )}
+        <h1 className="text-xl font-bold text-gray-900 leading-snug mb-2">
+          {issue.title}
+        </h1>
 
-            {issue.projectName && (
-              <div className="flex items-center gap-2 px-3 py-1.5 bg-white border border-gray-100 rounded-lg text-gray-400">
-                <span className="text-[10px] font-black uppercase tracking-widest">Project</span>
-                <span className="text-[10px] font-black text-gray-900 uppercase tracking-widest">{issue.projectName}</span>
-              </div>
-            )}
-          </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wide border ${
+            issue.status === "completed" || issue.status === "done" ? "bg-green-50 text-green-700 border-green-200" :
+            issue.status === "in_progress" ? "bg-blue-50 text-blue-700 border-blue-200" :
+            "bg-gray-50 text-gray-600 border-gray-200"
+          }`}>
+            {issue.status.replace("_", " ")}
+          </span>
+
+          <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wide border ${
+            issue.priority === "urgent" || issue.priority === "high" ? "bg-red-50 text-red-700 border-red-200" :
+            issue.priority === "medium" ? "bg-yellow-50 text-yellow-700 border-yellow-200" :
+            "bg-gray-50 text-gray-500 border-gray-200"
+          }`}>
+            {issue.priority}
+          </span>
+
+          {issue.agentName && (
+            <div className="flex items-center gap-1.5 px-2 py-0.5 bg-gray-900 text-white rounded text-[10px] font-bold">
+              <span>{issue.agentIcon || "🤖"}</span>
+              <span className="uppercase tracking-wide">{issue.agentName}</span>
+            </div>
+          )}
+
+          {issue.projectName && (
+            <div className="flex items-center gap-1 text-[10px] text-gray-400">
+              <span>Project</span>
+              <span className="text-gray-700 font-semibold">{issue.projectName}</span>
+            </div>
+          )}
         </div>
       </div>
 
       {/* Tabs */}
-      <div className="flex border-b border-gray-100 overflow-x-auto no-scrollbar -mx-6 px-6">
+      <div className="flex border-b border-gray-200 overflow-x-auto no-scrollbar shrink-0 px-6">
         {(["details", "comments", "timeline", "subtasks"] as Tab[]).map((tab) => (
           <button
             key={tab}
             onClick={() => setActiveTab(tab)}
-            className={`px-6 py-5 text-[11px] font-black uppercase tracking-[0.2em] transition-all border-b-2 -mb-px whitespace-nowrap ${
+            className={`px-4 py-2.5 text-[11px] font-semibold uppercase tracking-widest transition-all border-b-2 -mb-px whitespace-nowrap ${
               activeTab === tab
                 ? "border-blue-600 text-blue-600"
-                : "border-transparent text-gray-300 hover:text-gray-500 hover:border-gray-200"
+                : "border-transparent text-gray-400 hover:text-gray-600 hover:border-gray-300"
             }`}
           >
             {tab}
@@ -193,8 +191,8 @@ export function IssueDetail() {
         ))}
       </div>
 
-      {/* Content */}
-      <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
+      {/* Content — fills remaining height; timeline manages its own scroll internally */}
+      <div className={`flex-1 min-h-0 px-6 ${activeTab === "timeline" ? "overflow-hidden py-3" : "overflow-y-auto py-4"}`}>
         {renderTabContent()}
       </div>
     </div>

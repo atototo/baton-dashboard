@@ -22,101 +22,75 @@ function formatTime(ts: string) {
 }
 
 const WAKE_LABELS: Record<string, string> = {
-  issue_assigned: "배정",
-  issue_checked_out: "체크아웃",
-  comment_added: "코멘트",
-  approval_approved: "승인",
-  approval_rejected: "거절",
-  manual: "수동",
-  on_demand: "온디맨드",
-  automation: "자동화",
-  assignment: "배정",
-  retry_failed_run: "재시도",
+  issue_assigned: "배정", issue_checked_out: "체크아웃", comment_added: "코멘트",
+  approval_approved: "승인", approval_rejected: "거절", manual: "수동",
+  on_demand: "온디맨드", automation: "자동화", assignment: "배정",
+  issue_commented: "코멘트", retry_failed_run: "재시도",
 };
 
-// ── Status helpers ──────────────────────────────────────────────────────
-
-const RUN_STATUS = {
-  succeeded: {
-    bar: "bg-emerald-500",
-    badge: "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200",
-    dot: "bg-emerald-500",
-    card: "border-l-emerald-400",
-    selected: "ring-2 ring-emerald-100 border-emerald-300",
-  },
-  failed: {
-    bar: "bg-red-500",
-    badge: "bg-red-50 text-red-700 ring-1 ring-red-200",
-    dot: "bg-red-500",
-    card: "border-l-red-400",
-    selected: "ring-2 ring-red-100 border-red-300",
-  },
-  running: {
-    bar: "bg-blue-500 animate-pulse",
-    badge: "bg-blue-50 text-blue-700 ring-1 ring-blue-200",
-    dot: "bg-blue-500 animate-pulse",
-    card: "border-l-blue-400",
-    selected: "ring-2 ring-blue-100 border-blue-300",
-  },
+const STATUS_DOT: Record<string, string> = {
+  succeeded: "bg-emerald-500", failed: "bg-red-500",
+  running: "bg-blue-500 animate-pulse",
 };
 
-function getRunStatus(s?: string) {
-  return RUN_STATUS[s as keyof typeof RUN_STATUS] ?? {
-    bar: "bg-gray-300",
-    badge: "bg-gray-50 text-gray-500 ring-1 ring-gray-200",
-    dot: "bg-gray-300",
-    card: "border-l-gray-300",
-    selected: "ring-2 ring-gray-100 border-gray-300",
-  };
-}
+const STATUS_TEXT: Record<string, string> = {
+  succeeded: "text-emerald-600", failed: "text-red-600", running: "text-blue-600",
+};
 
-const STATUS_COLORS: Record<string, string> = {
+const ISSUE_STATUS_DOT: Record<string, string> = {
   done: "bg-emerald-500", in_progress: "bg-blue-500", in_review: "bg-amber-500",
   blocked: "bg-red-500", cancelled: "bg-gray-400", backlog: "bg-gray-300",
+  todo: "bg-gray-400",
 };
 
-// ── Left panel node items ───────────────────────────────────────────────
+// ── Left panel items ────────────────────────────────────────────────────
 
 function RunNodeItem({ event, index, isSelected, onClick, isLast }: {
   event: TimelineEventData; index: number; isSelected: boolean; onClick: () => void; isLast: boolean;
 }) {
   const d = event.details;
   const status = d.status ?? "unknown";
-  const st = getRunStatus(status);
+  const dot = STATUS_DOT[status] ?? "bg-gray-300";
+  const statusText = STATUS_TEXT[status] ?? "text-gray-500";
   const duration = formatDuration(d.startedAt, d.finishedAt);
   const wake = d.contextSnapshot?.wakeReason ?? d.contextSnapshot?.wakeSource ?? d.invocationSource ?? "";
+  const wakeLabel = WAKE_LABELS[wake] ?? wake;
+  const agentName = d.agentName ?? "에이전트";
+  const agentIcon = d.agentIcon && /\p{Emoji}/u.test(d.agentIcon) ? d.agentIcon : "🤖";
 
   return (
     <div className="flex flex-col items-center">
       <button
         onClick={onClick}
-        className={`w-full text-left bg-white border border-l-4 ${st.card} border-gray-200 rounded-xl p-3 shadow-sm transition-all
-          hover:border-gray-300 hover:shadow-md
-          ${isSelected ? st.selected : ""}`}
+        className={`w-full text-left px-2.5 py-2 rounded-lg transition-colors
+          ${isSelected
+            ? "bg-white border border-gray-300 shadow-sm"
+            : "hover:bg-white/70 border border-transparent"
+          }`}
       >
-        <div className="flex items-center gap-2 mb-1.5">
-          <div className="flex items-center justify-center w-5 h-5 rounded-full bg-gray-800 text-white text-[10px] font-black shrink-0">
-            {index}
-          </div>
-          <div className={`w-2 h-2 rounded-full shrink-0 ${st.dot}`} />
-          <span className={`text-[10px] px-1.5 py-0.5 rounded font-black uppercase tracking-tight ${st.badge}`}>{status}</span>
-          {duration && <span className="text-[10px] text-gray-400 ml-auto font-mono">{duration}</span>}
+        {/* Row 1: index + dot + status + duration */}
+        <div className="flex items-center gap-1.5 mb-0.5">
+          <span className="text-[10px] font-bold text-gray-400 w-3.5 shrink-0">{index}</span>
+          <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${dot}`} />
+          <span className={`text-[10px] font-bold uppercase ${statusText}`}>{status}</span>
+          {duration && <span className="text-[10px] text-gray-400 font-mono ml-auto">{duration}</span>}
         </div>
-        <div className="text-sm font-bold text-gray-800 truncate">
-          {d.agentIcon && /\p{Emoji}/u.test(d.agentIcon) ? d.agentIcon : "🤖"} {d.agentName ?? "에이전트"}
+        {/* Row 2: agent name */}
+        <div className="flex items-center gap-1.5 pl-5">
+          <span className="text-xs">{agentIcon}</span>
+          <span className="text-xs font-semibold text-gray-800 truncate">{agentName}</span>
         </div>
-        <div className="flex items-center gap-1.5 mt-1 flex-wrap">
-          {wake && (
-            <span className="text-[10px] bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded font-mono">
-              {WAKE_LABELS[wake] ?? wake}
-            </span>
+        {/* Row 3: wake + time */}
+        <div className="flex items-center gap-1.5 pl-5 mt-0.5">
+          {wakeLabel && (
+            <span className="text-[10px] text-gray-500 bg-gray-100 px-1 rounded font-mono shrink-0">{wakeLabel}</span>
           )}
-          <span className="text-[10px] text-gray-400 font-mono">
-            {d.startedAt ? formatTime(d.startedAt) : ""}
-          </span>
+          {d.startedAt && (
+            <span className="text-[10px] text-gray-400 font-mono">{formatTime(d.startedAt)}</span>
+          )}
         </div>
       </button>
-      {!isLast && <div className="w-px h-3 bg-gray-200 shrink-0" />}
+      {!isLast && <div className="w-px h-2 bg-gray-200 shrink-0" />}
     </div>
   );
 }
@@ -129,20 +103,19 @@ function CommentNodeItem({ event, isSelected, onClick, isLast }: {
     <div className="flex flex-col items-center">
       <button
         onClick={onClick}
-        className={`w-full text-left bg-white border border-gray-200 rounded-xl p-2.5 shadow-sm transition-all
-          hover:border-gray-300 hover:shadow-md
-          ${isSelected ? "ring-2 ring-gray-200 border-gray-300" : ""}`}
+        className={`w-full text-left px-2.5 py-1.5 rounded-lg transition-colors
+          ${isSelected ? "bg-white border border-gray-300 shadow-sm" : "hover:bg-white/70 border border-transparent"}`}
       >
-        <div className="flex items-center gap-2 mb-1">
-          <span className="text-sm">💬</span>
-          <span className="text-xs font-bold text-gray-700 truncate">{d.authorAgentName ?? "코멘트"}</span>
-          <span className="text-[10px] text-gray-400 font-mono ml-auto">{formatTime(event.createdAt)}</span>
+        <div className="flex items-center gap-1.5">
+          <span className="text-[11px]">💬</span>
+          <span className="text-xs text-gray-700 truncate">{d.authorAgentName ?? "코멘트"}</span>
+          <span className="text-[10px] text-gray-400 font-mono ml-auto shrink-0">{formatTime(event.createdAt)}</span>
         </div>
         {d.body && (
-          <p className="text-xs text-gray-500 line-clamp-2 leading-relaxed">{d.body}</p>
+          <p className="text-[10px] text-gray-400 truncate pl-4 mt-0.5">{d.body}</p>
         )}
       </button>
-      {!isLast && <div className="w-px h-3 bg-gray-200 shrink-0" />}
+      {!isLast && <div className="w-px h-2 bg-gray-200 shrink-0" />}
     </div>
   );
 }
@@ -155,17 +128,16 @@ function ApprovalNodeItem({ event, isSelected, onClick, isLast }: {
     <div className="flex flex-col items-center">
       <button
         onClick={onClick}
-        className={`w-full text-left bg-white border border-amber-200 rounded-xl p-2.5 shadow-sm transition-all
-          hover:border-amber-300 hover:shadow-md
-          ${isSelected ? "ring-2 ring-amber-100 border-amber-300" : ""}`}
+        className={`w-full text-left px-2.5 py-1.5 rounded-lg transition-colors
+          ${isSelected ? "bg-white border border-amber-200 shadow-sm" : "hover:bg-amber-50/50 border border-transparent"}`}
       >
-        <div className="flex items-center gap-2">
-          <span className="text-sm">⚖️</span>
-          <span className="text-xs font-bold text-amber-700 truncate">{d.approvalType ?? "승인"}</span>
-          <span className="text-[10px] text-gray-400 font-mono ml-auto">{formatTime(event.createdAt)}</span>
+        <div className="flex items-center gap-1.5">
+          <span className="text-[11px]">⚖️</span>
+          <span className="text-xs text-amber-700 truncate">{d.approvalType ?? "승인"}</span>
+          <span className="text-[10px] text-gray-400 font-mono ml-auto shrink-0">{formatTime(event.createdAt)}</span>
         </div>
       </button>
-      {!isLast && <div className="w-px h-3 bg-gray-200 shrink-0" />}
+      {!isLast && <div className="w-px h-2 bg-gray-200 shrink-0" />}
     </div>
   );
 }
@@ -173,12 +145,11 @@ function ApprovalNodeItem({ event, isSelected, onClick, isLast }: {
 function ActivityNodeItem({ event, isLast }: { event: TimelineEventData; isLast: boolean }) {
   const d = event.details;
   const newStatus = d.newStatus ?? d.status;
-  const dotColor = newStatus ? (STATUS_COLORS[newStatus] ?? "bg-gray-300") : "bg-gray-200";
-
+  const dotColor = newStatus ? (ISSUE_STATUS_DOT[newStatus] ?? "bg-gray-300") : "bg-gray-200";
   return (
     <div className="flex flex-col items-center">
-      <div className="flex items-center gap-2 py-1 px-2 w-full">
-        <div className={`w-2.5 h-2.5 rounded-full ${dotColor} ring-2 ring-white shadow-sm shrink-0`} />
+      <div className="flex items-center gap-1.5 px-2.5 py-1 w-full">
+        <div className={`w-1.5 h-1.5 rounded-full ${dotColor} ml-1 shrink-0`} />
         {newStatus && <span className="text-[10px] text-gray-500 font-mono">{newStatus}</span>}
         <span className="text-[10px] text-gray-400 font-mono ml-auto">{formatTime(event.createdAt)}</span>
       </div>
@@ -187,49 +158,40 @@ function ActivityNodeItem({ event, isLast }: { event: TimelineEventData; isLast:
   );
 }
 
-// ── Right panel ─────────────────────────────────────────────────────────
+// ── Right panel ──────────────────────────────────────────────────────────
 
 function RunDetail({ event }: { event: TimelineEventData }) {
   const d = event.details;
   const status = d.status ?? "unknown";
-  const st = getRunStatus(status);
+  const dot = STATUS_DOT[status] ?? "bg-gray-300";
+  const statusText = STATUS_TEXT[status] ?? "text-gray-500";
   const duration = formatDuration(d.startedAt, d.finishedAt);
   const wake = d.contextSnapshot?.wakeReason ?? d.contextSnapshot?.wakeSource ?? d.invocationSource ?? "";
+  const wakeLabel = WAKE_LABELS[wake] ?? wake;
 
   return (
     <div className="h-full flex flex-col">
       {/* Header */}
-      <div className="px-5 py-4 border-b border-gray-100 shrink-0">
-        <div className="flex items-start justify-between gap-3 mb-3">
-          <div>
-            <div className="flex items-center gap-2 mb-1">
-              <span className="text-base">
-                {d.agentIcon && /\p{Emoji}/u.test(d.agentIcon) ? d.agentIcon : "🤖"}
-              </span>
-              <span className="text-sm font-black text-gray-900 tracking-tight">{d.agentName ?? "에이전트"}</span>
-            </div>
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className={`text-[10px] px-2 py-0.5 rounded font-black uppercase tracking-tight ${st.badge}`}>{status}</span>
-              {duration && <span className="text-xs text-gray-500 font-mono">⏱ {duration}</span>}
-              {wake && (
-                <span className="text-[10px] bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded font-mono">
-                  {WAKE_LABELS[wake] ?? wake}
-                </span>
-              )}
-            </div>
-          </div>
-          {event.runId && (
-            <span className="text-[10px] text-gray-400 font-mono shrink-0 mt-1">{event.runId.slice(0, 8)}…</span>
-          )}
-        </div>
+      <div className="px-4 py-3 border-b border-gray-100 shrink-0 flex items-center gap-3">
+        <span className="text-sm">
+          {d.agentIcon && /\p{Emoji}/u.test(d.agentIcon) ? d.agentIcon : "🤖"}
+        </span>
+        <span className="text-sm font-bold text-gray-900">{d.agentName ?? "에이전트"}</span>
+        <div className={`w-1.5 h-1.5 rounded-full ${dot} shrink-0`} />
+        <span className={`text-xs font-mono font-semibold ${statusText}`}>{status}</span>
+        {duration && <span className="text-xs text-gray-400 font-mono">⏱ {duration}</span>}
+        {wakeLabel && <span className="text-[10px] text-gray-500 bg-gray-100 px-1.5 rounded font-mono">{wakeLabel}</span>}
         {d.startedAt && (
-          <div className="text-[10px] text-gray-400 font-mono">
-            {formatTime(d.startedAt)} {d.finishedAt && `→ ${formatTime(d.finishedAt)}`}
-          </div>
+          <span className="text-[10px] text-gray-400 font-mono ml-auto">
+            {formatTime(d.startedAt)}{d.finishedAt && ` → ${formatTime(d.finishedAt)}`}
+          </span>
+        )}
+        {event.runId && (
+          <span className="text-[10px] text-gray-300 font-mono shrink-0">{event.runId.slice(0, 8)}…</span>
         )}
       </div>
-      {/* Trace body */}
-      <div className="flex-1 overflow-y-auto bg-gray-50/50">
+      {/* Trace */}
+      <div className="flex-1 overflow-y-auto no-scrollbar">
         {event.runId ? (
           <div className="p-4">
             <RunTrace runId={event.runId} />
@@ -246,15 +208,13 @@ function CommentDetail({ event }: { event: TimelineEventData }) {
   const d = event.details;
   return (
     <div className="h-full flex flex-col">
-      <div className="px-5 py-4 border-b border-gray-100 shrink-0">
-        <div className="flex items-center gap-2">
-          <span className="text-base">💬</span>
-          <span className="text-sm font-black text-gray-900">{d.authorAgentName ?? "코멘트"}</span>
-          <span className="text-xs text-gray-400 font-mono ml-auto">{formatTime(event.createdAt)}</span>
-        </div>
+      <div className="px-4 py-3 border-b border-gray-100 shrink-0 flex items-center gap-2">
+        <span className="text-sm">💬</span>
+        <span className="text-sm font-bold text-gray-900">{d.authorAgentName ?? "코멘트"}</span>
+        <span className="text-xs text-gray-400 font-mono ml-auto">{formatTime(event.createdAt)}</span>
       </div>
-      <div className="flex-1 overflow-y-auto p-5 bg-gray-50/50">
-        <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap font-medium">{d.body}</p>
+      <div className="flex-1 overflow-y-auto p-4">
+        <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">{d.body}</p>
       </div>
     </div>
   );
@@ -264,16 +224,14 @@ function ApprovalDetail({ event }: { event: TimelineEventData }) {
   const d = event.details;
   return (
     <div className="h-full flex flex-col">
-      <div className="px-5 py-4 border-b border-gray-100 shrink-0">
-        <div className="flex items-center gap-2">
-          <span className="text-base">⚖️</span>
-          <span className="text-sm font-black text-amber-800">{d.approvalType} 승인 요청</span>
-          <span className="text-xs text-gray-400 font-mono ml-auto">{formatTime(event.createdAt)}</span>
-        </div>
+      <div className="px-4 py-3 border-b border-gray-100 shrink-0 flex items-center gap-2">
+        <span className="text-sm">⚖️</span>
+        <span className="text-sm font-bold text-amber-800">{d.approvalType} 승인 요청</span>
+        <span className="text-xs text-gray-400 font-mono ml-auto">{formatTime(event.createdAt)}</span>
       </div>
-      <div className="flex-1 overflow-y-auto p-5 bg-gray-50/50">
+      <div className="flex-1 overflow-y-auto p-4">
         {d.payload ? (
-          <pre className="text-xs text-gray-700 bg-white border border-gray-200 rounded-xl p-4 overflow-auto font-mono leading-relaxed">
+          <pre className="text-xs text-gray-700 bg-gray-50 border border-gray-200 rounded-lg p-3 overflow-auto font-mono leading-relaxed">
             {JSON.stringify(d.payload, null, 2)}
           </pre>
         ) : (
@@ -286,14 +244,14 @@ function ApprovalDetail({ event }: { event: TimelineEventData }) {
 
 function EmptyDetail() {
   return (
-    <div className="h-full flex flex-col items-center justify-center gap-3 text-gray-400 bg-gray-50/30">
-      <div className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center text-gray-300 text-xl">←</div>
-      <div className="text-sm font-medium text-gray-400">왼쪽에서 노드를 선택하세요</div>
+    <div className="h-full flex flex-col items-center justify-center gap-2 text-gray-400">
+      <div className="text-2xl">←</div>
+      <div className="text-xs text-gray-400">왼쪽에서 노드를 선택하세요</div>
     </div>
   );
 }
 
-// ── Main ─────────────────────────────────────────────────────────────────
+// ── Main ──────────────────────────────────────────────────────────────────
 
 export function IssueTimeline({ issueId }: IssueTimelineProps) {
   const [events, setEvents] = useState<TimelineEventData[]>([]);
@@ -304,7 +262,6 @@ export function IssueTimeline({ issueId }: IssueTimelineProps) {
     api.getIssueTimeline(issueId)
       .then((evts) => {
         setEvents(evts);
-        // Auto-select first run
         const firstRun = evts.find((e) => e.type === "run");
         if (firstRun) setSelectedId(firstRun.id);
       })
@@ -313,14 +270,14 @@ export function IssueTimeline({ issueId }: IssueTimelineProps) {
 
   if (loading) {
     return (
-      <div className="flex border border-gray-200 rounded-2xl shadow-sm overflow-hidden h-[680px]">
-        <div className="w-72 bg-gray-50 border-r border-gray-100 p-3 space-y-2">
-          {[1, 2, 3].map((i) => (
-            <div key={i} className="h-20 bg-gray-100 rounded-xl animate-pulse" />
+      <div className="flex border border-gray-200 rounded-xl overflow-hidden h-full">
+        <div className="w-64 bg-gray-50 border-r border-gray-100 p-2 space-y-1">
+          {[1, 2, 3, 4].map((i) => (
+            <div key={i} className="h-14 bg-gray-100 rounded-lg animate-pulse" />
           ))}
         </div>
         <div className="flex-1 bg-white p-4">
-          <div className="h-full bg-gray-50 rounded-xl animate-pulse" />
+          <div className="h-full bg-gray-50 rounded-lg animate-pulse" />
         </div>
       </div>
     );
@@ -328,11 +285,8 @@ export function IssueTimeline({ issueId }: IssueTimelineProps) {
 
   if (events.length === 0) {
     return (
-      <div className="flex items-center justify-center h-48 bg-gray-50 rounded-2xl border-2 border-dashed border-gray-200 text-gray-400">
-        <div className="text-center">
-          <div className="text-3xl mb-2">📋</div>
-          <div className="text-sm font-medium">타임라인 이벤트가 없습니다</div>
-        </div>
+      <div className="flex items-center justify-center h-40 bg-gray-50 rounded-xl border border-gray-200 text-gray-400 text-sm">
+        타임라인 이벤트가 없습니다
       </div>
     );
   }
@@ -341,15 +295,14 @@ export function IssueTimeline({ issueId }: IssueTimelineProps) {
   let runIndex = 0;
 
   return (
-    <div className="flex border border-gray-200 rounded-2xl shadow-sm overflow-hidden h-[720px]">
-      {/* ── Left: node pipeline ── */}
-      <div className="w-72 shrink-0 bg-gray-50 border-r border-gray-100 overflow-y-auto p-3">
-        <div className="text-[10px] font-black text-gray-400 uppercase tracking-[0.15em] mb-3 px-1">실행 흐름</div>
+    <div className="flex border border-gray-200 rounded-xl overflow-hidden h-full">
+      {/* ── Left: node list ── */}
+      <div className="w-64 shrink-0 bg-gray-50 border-r border-gray-100 overflow-y-auto py-2 px-1.5">
+        <div className="text-[9px] font-bold text-gray-400 uppercase tracking-widest mb-2 px-1.5">실행 흐름</div>
         {events.map((event, idx) => {
           const isSelected = event.id === selectedId;
           const toggle = () => setSelectedId(isSelected ? null : event.id);
           const isLast = idx === events.length - 1;
-
           if (event.type === "run") {
             runIndex++;
             return <RunNodeItem key={event.id} event={event} index={runIndex} isSelected={isSelected} onClick={toggle} isLast={isLast} />;
@@ -365,7 +318,7 @@ export function IssueTimeline({ issueId }: IssueTimelineProps) {
       </div>
 
       {/* ── Right: detail ── */}
-      <div className="flex-1 overflow-hidden bg-white">
+      <div className="flex-1 overflow-hidden bg-white no-scrollbar">
         {selectedEvent?.type === "run" && <RunDetail event={selectedEvent} />}
         {selectedEvent?.type === "comment" && <CommentDetail event={selectedEvent} />}
         {selectedEvent?.type === "approval" && <ApprovalDetail event={selectedEvent} />}
