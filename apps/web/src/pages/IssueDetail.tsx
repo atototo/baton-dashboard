@@ -7,6 +7,125 @@ import { IssueList } from "../components/IssueList.js";
 
 type Tab = "details" | "comments" | "timeline" | "subtasks";
 
+// ── Edit Modal ────────────────────────────────────────────────────────────────
+
+const STATUSES = ["backlog", "todo", "in_progress", "in_review", "blocked", "done", "cancelled"];
+const PRIORITIES = ["urgent", "high", "medium", "low"];
+
+function EditIssueModal({ issue, onClose, onSaved }: {
+  issue: Issue;
+  onClose: () => void;
+  onSaved: (updated: Issue) => void;
+}) {
+  const [title, setTitle] = useState(issue.title);
+  const [status, setStatus] = useState(issue.status);
+  const [priority, setPriority] = useState(issue.priority);
+  const [description, setDescription] = useState(issue.description ?? "");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleSave = async () => {
+    setSaving(true);
+    setError(null);
+    try {
+      const updated = await api.updateIssue(issue.id, { title, status, priority, description });
+      onSaved({ ...issue, ...updated, title, status, priority, description });
+    } catch (e) {
+      setError("저장에 실패했습니다.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm" onClick={onClose}>
+      <div
+        className="bg-white rounded-2xl shadow-xl border border-gray-200 w-full max-w-lg mx-4"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+          <span className="text-sm font-black text-gray-900 uppercase tracking-tight">이슈 수정</span>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 transition-colors text-lg leading-none">✕</button>
+        </div>
+
+        {/* Body */}
+        <div className="px-5 py-4 space-y-4">
+          {/* Title */}
+          <div>
+            <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5 block">제목</label>
+            <input
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              className="w-full text-sm font-semibold text-gray-900 border border-gray-200 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 transition"
+            />
+          </div>
+
+          {/* Status + Priority */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5 block">상태</label>
+              <select
+                value={status}
+                onChange={(e) => setStatus(e.target.value)}
+                className="w-full text-xs font-bold text-gray-700 border border-gray-200 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 transition bg-white"
+              >
+                {STATUSES.map((s) => (
+                  <option key={s} value={s}>{s.replace("_", " ")}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5 block">우선순위</label>
+              <select
+                value={priority}
+                onChange={(e) => setPriority(e.target.value)}
+                className="w-full text-xs font-bold text-gray-700 border border-gray-200 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 transition bg-white"
+              >
+                {PRIORITIES.map((p) => (
+                  <option key={p} value={p}>{p}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          {/* Description */}
+          <div>
+            <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5 block">설명</label>
+            <textarea
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              rows={5}
+              className="w-full text-sm text-gray-700 border border-gray-200 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 transition resize-none font-medium leading-relaxed"
+            />
+          </div>
+
+          {error && <p className="text-xs text-red-500 font-medium">{error}</p>}
+        </div>
+
+        {/* Footer */}
+        <div className="flex items-center justify-end gap-2 px-5 py-3 border-t border-gray-100">
+          <button
+            onClick={onClose}
+            className="px-4 py-1.5 text-xs font-bold text-gray-500 hover:text-gray-700 transition-colors"
+          >
+            취소
+          </button>
+          <button
+            onClick={handleSave}
+            disabled={saving}
+            className="px-4 py-1.5 text-xs font-black text-white bg-gray-900 hover:bg-black rounded-lg transition-colors disabled:opacity-50"
+          >
+            {saving ? "저장 중…" : "저장"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Main ─────────────────────────────────────────────────────────────────────
+
 export function IssueDetail() {
   const { id } = useParams<{ id: string }>();
   const location = useLocation();
@@ -14,22 +133,20 @@ export function IssueDetail() {
   const [subtasks, setSubtasks] = useState<Issue[]>([]);
   const [loading, setLoading] = useState(!location.state?.issue);
   const [activeTab, setActiveTab] = useState<Tab>("details");
+  const [editing, setEditing] = useState(false);
 
   useEffect(() => {
     if (!id) return;
-    
+
     const fetchIssueData = async () => {
       setLoading(true);
       try {
         let issueData = issue;
-        
-        // If we don't have the issue in state, or if the ID changed
+
         if (!issueData || (issueData.id !== id && issueData.identifier !== id)) {
           try {
-            // Try fetching by ID first
             issueData = await api.getIssue(id);
           } catch (e) {
-            // If fetching by ID fails (404 for identifier), try fetching all issues and filtering
             const allIssues = await api.getIssues({ limit: "100" });
             const found = allIssues.find(i => i.identifier === id);
             if (found) {
@@ -39,7 +156,7 @@ export function IssueDetail() {
             }
           }
         }
-        
+
         if (issueData) {
           setIssue(issueData);
           const subtasksData = await api.getIssues({ parentId: issueData.id });
@@ -129,7 +246,7 @@ export function IssueDetail() {
 
   return (
     <div className="flex flex-col -mx-8 -my-6 h-[calc(100vh-0px)] overflow-hidden">
-      {/* Breadcrumb + title + badges — compact single block */}
+      {/* Header */}
       <div className="px-6 pt-4 pb-2 shrink-0">
         <div className="flex items-center gap-1.5 text-[10px] font-mono text-gray-400 mb-1.5">
           <Link to="/issues" className="hover:text-blue-600 transition-colors">Issues</Link>
@@ -137,9 +254,17 @@ export function IssueDetail() {
           <span className="text-blue-600">{issue.identifier || issue.id.slice(0, 8)}</span>
         </div>
 
-        <h1 className="text-xl font-bold text-gray-900 leading-snug mb-2">
-          {issue.title}
-        </h1>
+        <div className="flex items-start justify-between gap-3">
+          <h1 className="text-xl font-bold text-gray-900 leading-snug mb-2">
+            {issue.title}
+          </h1>
+          <button
+            onClick={() => setEditing(true)}
+            className="shrink-0 mt-0.5 px-3 py-1 text-[10px] font-black text-gray-500 hover:text-gray-800 border border-gray-200 hover:border-gray-400 rounded-lg transition-colors uppercase tracking-widest"
+          >
+            수정
+          </button>
+        </div>
 
         <div className="flex flex-wrap items-center gap-2">
           <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wide border ${
@@ -191,10 +316,22 @@ export function IssueDetail() {
         ))}
       </div>
 
-      {/* Content — fills remaining height; timeline manages its own scroll internally */}
+      {/* Content */}
       <div className={`flex-1 min-h-0 px-6 ${activeTab === "timeline" ? "overflow-hidden py-3" : "overflow-y-auto py-4"}`}>
         {renderTabContent()}
       </div>
+
+      {/* Edit Modal */}
+      {editing && (
+        <EditIssueModal
+          issue={issue}
+          onClose={() => setEditing(false)}
+          onSaved={(updated) => {
+            setIssue(updated);
+            setEditing(false);
+          }}
+        />
+      )}
     </div>
   );
 }

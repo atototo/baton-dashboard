@@ -2,11 +2,11 @@ import { Link, useNavigate } from "react-router-dom";
 import { useDraggable } from "@dnd-kit/core";
 import type { Issue } from "../lib/api.js";
 
-const PRIORITY_ICONS: Record<string, string> = {
-  urgent: "🔴",
-  high: "🟠",
-  medium: "🟡",
-  low: "🟢",
+const PRIORITY_DOT: Record<string, string> = {
+  urgent: "bg-red-500",
+  high: "bg-orange-400",
+  medium: "bg-yellow-400",
+  low: "bg-green-400",
 };
 
 interface IssueCardProps {
@@ -20,15 +20,10 @@ export function IssueCard({ issue }: IssueCardProps) {
   });
 
   const style = transform
-    ? {
-        transform: `translate3d(${transform.x}px, ${transform.y}px, 0)`,
-      }
+    ? { transform: `translate3d(${transform.x}px, ${transform.y}px, 0)` }
     : undefined;
 
   const handleCardClick = () => {
-    // If it's a drag start, dnd-kit will handle it. 
-    // If it's a simple click, we navigate.
-    // Activation constraint in KanbanBoard (distance: 8) ensures this.
     navigate(`/issues/${issue.identifier || issue.id}`, { state: { issue } });
   };
 
@@ -39,43 +34,41 @@ export function IssueCard({ issue }: IssueCardProps) {
       {...listeners}
       {...attributes}
       onClick={handleCardClick}
-      className={`block bg-white border border-gray-200 rounded-lg p-3 shadow-sm hover:border-blue-400 hover:shadow-md transition-all group text-left cursor-grab active:cursor-grabbing ${
-        isDragging ? "opacity-50 ring-2 ring-blue-500 z-50" : ""
+      className={`bg-white border border-gray-200 rounded-lg p-2 hover:border-blue-300 hover:shadow-sm transition-all cursor-grab active:cursor-grabbing ${
+        isDragging ? "opacity-50 ring-2 ring-blue-400 z-50" : ""
       }`}
     >
-      <div className="flex items-start justify-between gap-2 mb-2 pointer-events-none">
+      {/* Identifier + priority dot */}
+      <div className="flex items-center justify-between gap-1 mb-1 pointer-events-none">
         <Link
           to={`/issues/${issue.identifier || issue.id}`}
           state={{ issue }}
-          className="text-xs font-mono font-bold text-gray-400 group-hover:text-blue-500 transition-colors pointer-events-auto"
+          className="text-[10px] font-mono font-bold text-gray-400 hover:text-blue-500 transition-colors pointer-events-auto"
           onClick={(e) => e.stopPropagation()}
           onPointerDown={(e) => e.stopPropagation()}
         >
           {issue.identifier ?? `#${issue.issueNumber}`}
         </Link>
-        <span className="text-xs" title={`Priority: ${issue.priority}`}>
-          {PRIORITY_ICONS[issue.priority] ?? "⚪"}
-        </span>
+        <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${PRIORITY_DOT[issue.priority] ?? "bg-gray-300"}`} title={issue.priority} />
       </div>
-      <div
-        className="text-sm font-semibold text-gray-800 line-clamp-2 mb-3 group-hover:text-blue-600 transition-colors pointer-events-auto"
-      >
+
+      {/* Title */}
+      <p className="text-xs font-semibold text-gray-800 line-clamp-2 leading-snug mb-1.5 pointer-events-none">
         {issue.title}
-      </div>
-      <div className="flex items-center justify-between mt-auto pointer-events-none">
+      </p>
+
+      {/* Footer */}
+      <div className="flex items-center justify-between pointer-events-none">
         {issue.agentName ? (
-          <div className="flex items-center gap-1.5 px-2 py-0.5 bg-gray-50 border border-gray-100 rounded text-[10px] font-bold text-gray-600">
+          <div className="flex items-center gap-1 text-[9px] font-bold text-gray-500 truncate max-w-[80%]">
             <span>{issue.agentIcon ?? "🤖"}</span>
-            <span className="truncate max-w-[80px]">{issue.agentName}</span>
+            <span className="truncate">{issue.agentName}</span>
           </div>
         ) : (
-          <span className="text-[10px] text-gray-400 font-medium italic">Unassigned</span>
+          <span className="text-[9px] text-gray-300 italic">Unassigned</span>
         )}
-        <span className="text-[10px] text-gray-400 font-medium">
-          {new Date(issue.updatedAt).toLocaleDateString(undefined, {
-            month: "short",
-            day: "numeric",
-          })}
+        <span className="text-[9px] text-gray-300 font-mono shrink-0">
+          {new Date(issue.updatedAt).toLocaleDateString("ko-KR", { month: "numeric", day: "numeric" })}
         </span>
       </div>
     </div>

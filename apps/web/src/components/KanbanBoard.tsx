@@ -55,29 +55,18 @@ export function KanbanBoard({ issues, stats, onRefresh, onCreateIssue }: KanbanB
   };
 
   return (
-    <>
-      <div className="flex justify-end mb-3">
-        <button
-          onClick={onCreateIssue}
-          disabled={!onCreateIssue}
-          className="text-xs font-black text-blue-600 border border-blue-200 bg-blue-50 hover:bg-blue-100 px-3 py-1.5 rounded-lg transition-all disabled:opacity-0"
-        >
-          + New Issue
-        </button>
+    <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
+      <div className="flex gap-2 w-full min-h-0">
+        {COLUMNS.map((col) => (
+          <KanbanColumn
+            key={col.key}
+            title={col.title}
+            status={col.key}
+            issues={getIssuesByStatus(col.key)}
+            count={getCountByStatus(col.key)}
+          />
+        ))}
       </div>
-      <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
-        <div className="flex gap-6 overflow-x-auto pb-6 scrollbar-thin scrollbar-thumb-gray-200 scrollbar-track-transparent">
-          {COLUMNS.map((col) => (
-            <KanbanColumn
-              key={col.key}
-              title={col.title}
-              status={col.key}
-              issues={getIssuesByStatus(col.key)}
-              count={getCountByStatus(col.key)}
-            />
-          ))}
-        </div>
-      </DndContext>
-    </>
+    </DndContext>
   );
 }

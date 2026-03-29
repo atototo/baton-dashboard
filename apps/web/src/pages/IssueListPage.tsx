@@ -23,27 +23,32 @@ export function IssueListPage() {
     issues.refetch();
   };
 
+  const isBoard = viewMode === "kanban";
+
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+    <div className={`flex flex-col ${isBoard ? "-mx-8 -my-6 h-[calc(100vh-0px)] overflow-hidden" : "space-y-6"}`}>
+      {/* Header */}
+      <div className={`flex flex-col md:flex-row md:items-center justify-between gap-4 shrink-0 ${isBoard ? "px-8 pt-6 pb-3" : ""}`}>
         <div>
           <h1 className="text-2xl font-black text-gray-900 tracking-tight uppercase">Issues</h1>
           <p className="text-sm text-gray-500 font-medium">Manage and track all issues across projects.</p>
         </div>
 
         <div className="flex items-center gap-3">
-          <select
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
-            className="text-xs font-bold text-gray-600 bg-white border border-gray-200 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500/20 transition-all"
-          >
-            <option value="">All Statuses</option>
-            <option value="backlog">Backlog</option>
-            <option value="todo">To Do</option>
-            <option value="in_progress">In Progress</option>
-            <option value="in_review">In Review</option>
-            <option value="done">Done</option>
-          </select>
+          {!isBoard && (
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              className="text-xs font-bold text-gray-600 bg-white border border-gray-200 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500/20 transition-all"
+            >
+              <option value="">All Statuses</option>
+              <option value="backlog">Backlog</option>
+              <option value="todo">To Do</option>
+              <option value="in_progress">In Progress</option>
+              <option value="in_review">In Review</option>
+              <option value="done">Done</option>
+            </select>
+          )}
 
           <div className="flex items-center bg-gray-100 p-1 rounded-xl">
             <button
@@ -74,6 +79,7 @@ export function IssueListPage() {
         </div>
       </div>
 
+      {/* Content */}
       {issues.loading ? (
         <div className="flex flex-col items-center justify-center py-20 gap-4">
           <div className="w-8 h-8 border-4 border-blue-600/20 border-t-blue-600 rounded-full animate-spin" />
@@ -84,13 +90,15 @@ export function IssueListPage() {
           Error loading issues: {issues.error}
         </div>
       ) : issues.data ? (
-        <div className="animate-in fade-in duration-500">
-          {viewMode === "list" ? (
-            <IssueList issues={issues.data} />
-          ) : (
+        isBoard ? (
+          <div className="flex-1 min-h-0 px-8 pb-4 overflow-hidden">
             <KanbanBoard issues={issues.data} onRefresh={handleRefresh} />
-          )}
-        </div>
+          </div>
+        ) : (
+          <div className="animate-in fade-in duration-500">
+            <IssueList issues={issues.data} />
+          </div>
+        )
       ) : null}
     </div>
   );
