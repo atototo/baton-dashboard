@@ -188,6 +188,7 @@ export const heartbeatRuns = pgTable("heartbeat_runs", {
 	stdoutExcerpt: text("stdout_excerpt"),
 	stderrExcerpt: text("stderr_excerpt"),
 	errorCode: text("error_code"),
+	promptSnapshot: jsonb("prompt_snapshot"),
 }, (table) => [
 	index("heartbeat_runs_company_agent_started_idx").using("btree", table.companyId.asc().nullsLast().op("timestamptz_ops"), table.agentId.asc().nullsLast().op("timestamptz_ops"), table.startedAt.asc().nullsLast().op("timestamptz_ops")),
 	foreignKey({

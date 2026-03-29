@@ -1,6 +1,7 @@
 import { and, eq } from "drizzle-orm";
 import { Hono } from "hono";
 import { db, schema } from "../db/index.js";
+import { createIssue } from "./issues.js";
 
 export const companiesRoute = new Hono();
 
@@ -19,4 +20,21 @@ companiesRoute.get("/", async (c) => {
     .where(and(eq(schema.companies.status, "active")));
 
   return c.json(rows);
+});
+
+// POST /api/companies/:companyId/issues - 회사 범위 이슈 생성
+companiesRoute.post("/:companyId/issues", async (c) => {
+  const payload = await c.req.json().catch(() => null);
+
+  if (!payload || typeof payload !== "object") {
+    return c.json({ error: "Invalid JSON body" }, 400);
+  }
+
+  const result = await createIssue(payload, c.req.param("companyId"));
+
+  if ("error" in result) {
+    return c.json({ error: result.error }, result.status);
+  }
+
+  return c.json(result.issue, result.status);
 });

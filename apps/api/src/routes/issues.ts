@@ -1,62 +1,88 @@
 import { Hono } from "hono";
-import { and, count, desc, eq, isNull, sql } from "drizzle-orm";
+import {
+  and,
+  asc,
+  count,
+  desc,
+  eq,
+  inArray,
+  isNull,
+  or,
+  sql,
+} from "drizzle-orm";
 import { db, schema } from "../db/index.js";
 
 export const issuesRoute = new Hono();
 
-const issueListSelection = {
+type CreateIssueInput = {
+  companyId?: unknown;
+  title?: unknown;
+  description?: unknown;
+  priority?: unknown;
+  projectId?: unknown;
+  assigneeAgentId?: unknown;
+  parentId?: unknown;
+};
+
+type CreateIssueResult =
+  | { status: 201; issue: Record<string, unknown> }
+  | { status: 400 | 404; error: string };
+
+const issueSummarySelect = {
   id: schema.issues.id,
+  companyId: schema.issues.companyId,
+  projectId: schema.issues.projectId,
+  goalId: schema.issues.goalId,
+  parentId: schema.issues.parentId,
   title: schema.issues.title,
+  description: schema.issues.description,
   status: schema.issues.status,
   priority: schema.issues.priority,
-  identifier: schema.issues.identifier,
-  projectId: schema.issues.projectId,
   assigneeAgentId: schema.issues.assigneeAgentId,
-  parentId: schema.issues.parentId,
-  createdAt: schema.issues.createdAt,
-  updatedAt: schema.issues.updatedAt,
+  assigneeUserId: schema.issues.assigneeUserId,
+  createdByAgentId: schema.issues.createdByAgentId,
+  createdByUserId: schema.issues.createdByUserId,
+  requestDepth: schema.issues.requestDepth,
+  billingCode: schema.issues.billingCode,
   startedAt: schema.issues.startedAt,
   completedAt: schema.issues.completedAt,
+  cancelledAt: schema.issues.cancelledAt,
+  createdAt: schema.issues.createdAt,
+  updatedAt: schema.issues.updatedAt,
+  issueNumber: schema.issues.issueNumber,
+  identifier: schema.issues.identifier,
+  checkoutRunId: schema.issues.checkoutRunId,
+  executionRunId: schema.issues.executionRunId,
+  executionAgentNameKey: schema.issues.executionAgentNameKey,
+  executionLockedAt: schema.issues.executionLockedAt,
+  executionWorkspaceId: schema.issues.executionWorkspaceId,
+  delegation: schema.issues.delegation,
   agentName: schema.agents.name,
   agentIcon: schema.agents.icon,
   projectName: schema.projects.name,
 };
 
-// GET /api/issues - 이슈 목록 (hiddenAt이 null인 것만)
-issuesRoute.get("/", async (c) => {
-  const status = c.req.query("status");
-  const projectId = c.req.query("projectId");
-  const companyId = c.req.query("companyId");
-  const limit = Number(c.req.query("limit")) || 50;
-  const offset = Number(c.req.query("offset")) || 0;
-
-  const conditions = [isNull(schema.issues.hiddenAt)];
-  if (status) conditions.push(eq(schema.issues.status, status));
-  if (projectId) conditions.push(eq(schema.issues.projectId, projectId));
-  if (companyId) conditions.push(eq(schema.issues.companyId, companyId));
-
-  const rows = await db
-    .select(issueListSelection)
+const getIssueById = async (id: string) => {
+  const [issue] = await db
+    .select({
+      id: schema.issues.id,
+      companyId: schema.issues.companyId,
+      executionRunId: schema.issues.executionRunId,
+    })
     .from(schema.issues)
-    .leftJoin(schema.agents, eq(schema.issues.assigneeAgentId, schema.agents.id))
-    .leftJoin(schema.projects, eq(schema.issues.projectId, schema.projects.id))
-    .where(and(...conditions))
-    .orderBy(desc(schema.issues.updatedAt))
-    .limit(limit)
-    .offset(offset);
+    .where(eq(schema.issues.id, id))
+    .limit(1);
 
-  return c.json(rows);
-});
+  return issue ?? null;
+};
 
-// POST /api/issues - 이슈 생성
-issuesRoute.post("/", async (c) => {
-  const payload = await c.req.json().catch(() => null);
-
-  if (!payload || typeof payload !== "object") {
-    return c.json({ error: "Invalid JSON body" }, 400);
-  }
-
-  const companyId = typeof payload.companyId === "string" ? payload.companyId : "";
+export const createIssue = async (
+  payload: CreateIssueInput,
+  companyIdOverride?: string,
+): Promise<CreateIssueResult> => {
+  const companyId =
+    companyIdOverride ??
+    (typeof payload.companyId === "string" ? payload.companyId.trim() : "");
   const title = typeof payload.title === "string" ? payload.title.trim() : "";
   const description =
     typeof payload.description === "string" ? payload.description.trim() : null;
@@ -72,9 +98,19 @@ issuesRoute.post("/", async (c) => {
     typeof payload.assigneeAgentId === "string" && payload.assigneeAgentId.trim()
       ? payload.assigneeAgentId
       : null;
+  const parentId =
+    typeof payload.parentId === "string" && payload.parentId.trim()
+      ? payload.parentId
+      : null;
 
-  if (!companyId) return c.json({ error: "companyId is required" }, 400);
-  if (!title) return c.json({ error: "title is required" }, 400);
+  if (!companyId) return { status: 400, error: "companyId is required" };
+  if (!title) return { status: 400, error: "title is required" };
+
+  const parentIssue = parentId ? await getIssueById(parentId) : null;
+
+  if (parentId && (!parentIssue || parentIssue.companyId !== companyId)) {
+    return { status: 400, error: "parentId is invalid" };
+  }
 
   const issueId = await db.transaction(async (tx) => {
     const [company] = await tx
@@ -98,11 +134,13 @@ issuesRoute.post("/", async (c) => {
       .values({
         companyId,
         projectId,
+        parentId,
         title,
         description: description || null,
         priority,
         assigneeAgentId,
         status: assigneeAgentId ? "todo" : "backlog",
+        issueNumber: company.issueCounter,
         identifier: `${company.issuePrefix}-${company.issueCounter}`,
       })
       .returning({ id: schema.issues.id });
@@ -111,11 +149,11 @@ issuesRoute.post("/", async (c) => {
   });
 
   if (!issueId) {
-    return c.json({ error: "Company not found" }, 404);
+    return { status: 404, error: "Company not found" };
   }
 
   const [createdIssue] = await db
-    .select(issueListSelection)
+    .select(issueSummarySelect)
     .from(schema.issues)
     .leftJoin(schema.agents, eq(schema.issues.assigneeAgentId, schema.agents.id))
     .leftJoin(schema.projects, eq(schema.issues.projectId, schema.projects.id))
@@ -123,10 +161,260 @@ issuesRoute.post("/", async (c) => {
     .limit(1);
 
   if (!createdIssue) {
-    return c.json({ error: "Failed to create issue" }, 500);
+    return { status: 400, error: "Failed to create issue" };
   }
 
-  return c.json(createdIssue, 201);
+  return { status: 201, issue: createdIssue };
+};
+
+// GET /api/issues/stats/summary - 이슈 통계
+issuesRoute.get("/stats/summary", async (c) => {
+  const projectId = c.req.query("projectId");
+  const companyId = c.req.query("companyId");
+
+  const conditions = [isNull(schema.issues.hiddenAt)];
+  if (projectId) conditions.push(eq(schema.issues.projectId, projectId));
+  if (companyId) conditions.push(eq(schema.issues.companyId, companyId));
+
+  const result = await db
+    .select({
+      status: schema.issues.status,
+      count: count(),
+    })
+    .from(schema.issues)
+    .where(and(...conditions))
+    .groupBy(schema.issues.status);
+
+  return c.json(result);
+});
+
+// GET /api/issues/:id/comments - 이슈 코멘트 목록
+issuesRoute.get("/:id/comments", async (c) => {
+  const id = c.req.param("id");
+  const issue = await getIssueById(id);
+
+  if (!issue) return c.json({ error: "Not found" }, 404);
+
+  const rows = await db
+    .select({
+      id: schema.issueComments.id,
+      companyId: schema.issueComments.companyId,
+      issueId: schema.issueComments.issueId,
+      authorAgentId: schema.issueComments.authorAgentId,
+      authorUserId: schema.issueComments.authorUserId,
+      body: schema.issueComments.body,
+      createdAt: schema.issueComments.createdAt,
+      updatedAt: schema.issueComments.updatedAt,
+      authorAgentName: schema.agents.name,
+      authorAgentIcon: schema.agents.icon,
+    })
+    .from(schema.issueComments)
+    .leftJoin(schema.agents, eq(schema.issueComments.authorAgentId, schema.agents.id))
+    .where(eq(schema.issueComments.issueId, id))
+    .orderBy(asc(schema.issueComments.createdAt));
+
+  return c.json(rows);
+});
+
+// POST /api/issues/:id/comments - 이슈 코멘트 작성
+issuesRoute.post("/:id/comments", async (c) => {
+  const id = c.req.param("id");
+  const issue = await getIssueById(id);
+
+  if (!issue) return c.json({ error: "Not found" }, 404);
+
+  const payload = await c.req.json().catch(() => null);
+  const body = typeof payload?.body === "string" ? payload.body.trim() : "";
+
+  if (!body) {
+    return c.json({ error: "body is required" }, 400);
+  }
+
+  const [comment] = await db
+    .insert(schema.issueComments)
+    .values({
+      companyId: issue.companyId,
+      issueId: issue.id,
+      authorAgentId: typeof payload?.authorAgentId === "string" ? payload.authorAgentId : null,
+      authorUserId: typeof payload?.authorUserId === "string" ? payload.authorUserId : null,
+      body,
+    })
+    .returning();
+
+  return c.json(comment, 201);
+});
+
+// GET /api/issues/:id/timeline - 이슈 타임라인
+issuesRoute.get("/:id/timeline", async (c) => {
+  const id = c.req.param("id");
+  const issue = await getIssueById(id);
+
+  if (!issue) return c.json({ error: "Not found" }, 404);
+
+  const activityRows = await db
+    .select({
+      id: schema.activityLog.id,
+      type: sql<string>`'activity'`,
+      issueId: sql<string>`${id}`,
+      createdAt: schema.activityLog.createdAt,
+      action: schema.activityLog.action,
+      actorType: schema.activityLog.actorType,
+      actorId: schema.activityLog.actorId,
+      runId: schema.activityLog.runId,
+      details: schema.activityLog.details,
+    })
+    .from(schema.activityLog)
+    .where(
+      and(eq(schema.activityLog.entityType, "issue"), eq(schema.activityLog.entityId, id)),
+    )
+    .orderBy(desc(schema.activityLog.createdAt));
+
+  const commentRows = await db
+    .select({
+      id: schema.issueComments.id,
+      type: sql<string>`'comment'`,
+      issueId: schema.issueComments.issueId,
+      createdAt: schema.issueComments.createdAt,
+      action: sql<string>`'issue.comment_added'`,
+      actorType:
+        sql<string>`case when ${schema.issueComments.authorAgentId} is not null then 'agent' else 'user' end`,
+      actorId:
+        sql<string>`coalesce(${schema.issueComments.authorAgentId}::text, ${schema.issueComments.authorUserId})`,
+      runId: sql<string | null>`null`,
+      details: sql`jsonb_build_object(
+        'body', ${schema.issueComments.body},
+        'authorAgentId', ${schema.issueComments.authorAgentId},
+        'authorUserId', ${schema.issueComments.authorUserId},
+        'authorAgentName', ${schema.agents.name},
+        'authorAgentIcon', ${schema.agents.icon}
+      )`,
+    })
+    .from(schema.issueComments)
+    .leftJoin(schema.agents, eq(schema.issueComments.authorAgentId, schema.agents.id))
+    .where(eq(schema.issueComments.issueId, id))
+    .orderBy(desc(schema.issueComments.createdAt));
+
+  const approvalRows = await db
+    .select({
+      id: schema.approvals.id,
+      type: sql<string>`'approval'`,
+      issueId: schema.issueApprovals.issueId,
+      createdAt: schema.approvals.createdAt,
+      action: sql<string>`'approval.linked'`,
+      actorType:
+        sql<string>`case when ${schema.approvals.requestedByAgentId} is not null then 'agent' else 'user' end`,
+      actorId:
+        sql<string>`coalesce(${schema.approvals.requestedByAgentId}::text, ${schema.approvals.requestedByUserId})`,
+      runId: sql<string | null>`null`,
+      details: sql`jsonb_build_object(
+        'approvalId', ${schema.approvals.id},
+        'approvalType', ${schema.approvals.type},
+        'status', ${schema.approvals.status},
+        'requestedByAgentId', ${schema.approvals.requestedByAgentId},
+        'requestedByUserId', ${schema.approvals.requestedByUserId},
+        'payload', ${schema.approvals.payload}
+      )`,
+    })
+    .from(schema.issueApprovals)
+    .innerJoin(schema.approvals, eq(schema.issueApprovals.approvalId, schema.approvals.id))
+    .where(eq(schema.issueApprovals.issueId, id))
+    .orderBy(desc(schema.approvals.createdAt));
+
+  const activityRunIds = activityRows
+    .map((row) => row.runId)
+    .filter((runId): runId is string => typeof runId === "string");
+
+  const runConditions = [
+    eq(sql<string>`${schema.heartbeatRuns.contextSnapshot} ->> 'issueId'`, id),
+  ];
+
+  if (issue.executionRunId) {
+    runConditions.push(eq(schema.heartbeatRuns.id, issue.executionRunId));
+  }
+
+  if (activityRunIds.length > 0) {
+    runConditions.push(inArray(schema.heartbeatRuns.id, activityRunIds));
+  }
+
+  const runRows = await db
+    .select({
+      id: schema.heartbeatRuns.id,
+      type: sql<string>`'run'`,
+      issueId: sql<string>`${id}`,
+      createdAt: schema.heartbeatRuns.createdAt,
+      action: sql<string>`'heartbeat_run'`,
+      actorType: sql<string>`'agent'`,
+      actorId: schema.heartbeatRuns.agentId,
+      runId: schema.heartbeatRuns.id,
+      details: sql`jsonb_build_object(
+        'status', ${schema.heartbeatRuns.status},
+        'agentId', ${schema.heartbeatRuns.agentId},
+        'agentName', ${schema.agents.name},
+        'agentIcon', ${schema.agents.icon},
+        'invocationSource', ${schema.heartbeatRuns.invocationSource},
+        'triggerDetail', ${schema.heartbeatRuns.triggerDetail},
+        'startedAt', ${schema.heartbeatRuns.startedAt},
+        'finishedAt', ${schema.heartbeatRuns.finishedAt},
+        'contextSnapshot', coalesce(${schema.heartbeatRuns.contextSnapshot}, '{}'::jsonb) ||
+          case
+            when ${schema.heartbeatRuns.promptSnapshot} is null then '{}'::jsonb
+            else jsonb_build_object('promptSnapshot', ${schema.heartbeatRuns.promptSnapshot})
+          end,
+        'promptSnapshot', ${schema.heartbeatRuns.promptSnapshot}
+      )`,
+    })
+    .from(schema.heartbeatRuns)
+    .leftJoin(schema.agents, eq(schema.heartbeatRuns.agentId, schema.agents.id))
+    .where(and(eq(schema.heartbeatRuns.companyId, issue.companyId), or(...runConditions)))
+    .orderBy(desc(schema.heartbeatRuns.createdAt));
+
+  const timeline = [...activityRows, ...commentRows, ...approvalRows, ...runRows].sort(
+    (left, right) => right.createdAt.localeCompare(left.createdAt),
+  );
+
+  return c.json(timeline);
+});
+
+// GET /api/issues - 이슈 목록 (hiddenAt이 null인 것만)
+issuesRoute.get("/", async (c) => {
+  const status = c.req.query("status");
+  const projectId = c.req.query("projectId");
+  const companyId = c.req.query("companyId");
+  const limit = Number(c.req.query("limit")) || 50;
+  const offset = Number(c.req.query("offset")) || 0;
+
+  const conditions = [isNull(schema.issues.hiddenAt)];
+  if (status) conditions.push(eq(schema.issues.status, status));
+  if (projectId) conditions.push(eq(schema.issues.projectId, projectId));
+  if (companyId) conditions.push(eq(schema.issues.companyId, companyId));
+
+  const rows = await db
+    .select(issueSummarySelect)
+    .from(schema.issues)
+    .leftJoin(schema.agents, eq(schema.issues.assigneeAgentId, schema.agents.id))
+    .leftJoin(schema.projects, eq(schema.issues.projectId, schema.projects.id))
+    .where(and(...conditions))
+    .orderBy(desc(schema.issues.updatedAt))
+    .limit(limit)
+    .offset(offset);
+
+  return c.json(rows);
+});
+
+// POST /api/issues - 이슈 생성
+issuesRoute.post("/", async (c) => {
+  const payload = await c.req.json().catch(() => null);
+
+  if (!payload || typeof payload !== "object") {
+    return c.json({ error: "Invalid JSON body" }, 400);
+  }
+  const result = await createIssue(payload);
+
+  if ("error" in result) {
+    return c.json({ error: result.error }, result.status);
+  }
+
+  return c.json(result.issue, result.status);
 });
 
 // GET /api/issues/:id - 이슈 상세
@@ -134,25 +422,13 @@ issuesRoute.get("/:id", async (c) => {
   const id = c.req.param("id");
 
   const [row] = await db
-    .select()
+    .select(issueSummarySelect)
     .from(schema.issues)
+    .leftJoin(schema.agents, eq(schema.issues.assigneeAgentId, schema.agents.id))
+    .leftJoin(schema.projects, eq(schema.issues.projectId, schema.projects.id))
     .where(eq(schema.issues.id, id))
     .limit(1);
 
   if (!row) return c.json({ error: "Not found" }, 404);
   return c.json(row);
-});
-
-// GET /api/issues/stats/summary - 이슈 통계
-issuesRoute.get("/stats/summary", async (c) => {
-  const result = await db
-    .select({
-      status: schema.issues.status,
-      count: count(),
-    })
-    .from(schema.issues)
-    .where(isNull(schema.issues.hiddenAt))
-    .groupBy(schema.issues.status);
-
-  return c.json(result);
 });
