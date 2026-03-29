@@ -47,7 +47,36 @@ function parseLog(content: string): LogEntry[] {
       continue;
     }
 
-    // Codex format: assistant message
+    // Codex item format: item.started → skip (we handle item.completed)
+    if (inner.type === "item.started") continue;
+
+    // Codex item format: item.completed
+    if (inner.type === "item.completed") {
+      const item = inner.item as Record<string, unknown> | undefined;
+      if (!item) continue;
+
+      if (item.type === "agent_message") {
+        const text = typeof item.text === "string" ? item.text : "";
+        if (text) entries.push({ kind: "assistant", ts, text });
+        continue;
+      }
+
+      if (item.type === "command_execution") {
+        const cmd = typeof item.command === "string" ? item.command : JSON.stringify(item.command ?? "");
+        const output = typeof item.output === "string" ? item.output : JSON.stringify(item.output ?? "");
+        const exitCode = item.exit_code as number | undefined;
+        const callId = (item.id as string) ?? "";
+        entries.push({ kind: "tool_call", ts, name: "command_execution", input: JSON.stringify({ command: cmd }), callId });
+        entries.push({ kind: "tool_result", ts, callId, output, exitCode, isError: exitCode !== undefined && exitCode !== 0 });
+        continue;
+      }
+      continue;
+    }
+
+    // Codex turn lifecycle
+    if (inner.type === "turn.started" || inner.type === "turn.completed") continue;
+
+    // Codex format: assistant message (older format)
     if (inner.type === "message" && inner.role === "assistant") {
       const textContent = ((inner.content ?? []) as Array<{ type: string; text?: string }>)
         .filter((c) => c.type === "text")
@@ -57,7 +86,7 @@ function parseLog(content: string): LogEntry[] {
       continue;
     }
 
-    // Codex format: tool_call
+    // Codex format: tool_call (older format)
     if (inner.type === "tool_call") {
       const params = inner.parameters;
       entries.push({
@@ -70,7 +99,7 @@ function parseLog(content: string): LogEntry[] {
       continue;
     }
 
-    // Codex format: tool_result
+    // Codex format: tool_result (older format)
     if (inner.type === "tool_result") {
       const rawOutput = inner.output;
       const output = typeof rawOutput === "string" ? rawOutput : JSON.stringify(rawOutput ?? "");
@@ -151,8 +180,8 @@ function TraceEntry({ entry }: { entry: LogEntry }) {
   if (entry.kind === "system") {
     return (
       <div className="flex items-start gap-2 py-0.5 opacity-60">
-        <span className="text-[9px] text-gray-300 shrink-0 mt-0.5 w-14">{ts}</span>
-        <span className="text-[10px] text-blue-400 font-mono">{entry.message}</span>
+        <span className="text-xs text-gray-300 shrink-0 mt-0.5 w-14">{ts}</span>
+        <span className="text-xs text-blue-400 font-mono">{entry.message}</span>
       </div>
     );
   }
@@ -160,8 +189,8 @@ function TraceEntry({ entry }: { entry: LogEntry }) {
   if (entry.kind === "stderr") {
     return (
       <div className="flex items-start gap-2 py-0.5">
-        <span className="text-[9px] text-gray-300 shrink-0 mt-0.5 w-14">{ts}</span>
-        <span className="text-[10px] text-red-400 font-mono">{entry.message}</span>
+        <span className="text-xs text-gray-300 shrink-0 mt-0.5 w-14">{ts}</span>
+        <span className="text-xs text-red-400 font-mono">{entry.message}</span>
       </div>
     );
   }
@@ -169,10 +198,10 @@ function TraceEntry({ entry }: { entry: LogEntry }) {
   if (entry.kind === "assistant") {
     return (
       <div className="flex items-start gap-2 py-1">
-        <span className="text-[9px] text-gray-300 shrink-0 mt-0.5 w-14">{ts}</span>
+        <span className="text-xs text-gray-300 shrink-0 mt-0.5 w-14">{ts}</span>
         <div className="flex items-start gap-1.5 flex-1 min-w-0">
-          <span className="text-[10px] shrink-0">🤖</span>
-          <span className="text-[11px] text-gray-600 italic line-clamp-3">{entry.text}</span>
+          <span className="text-xs shrink-0">🤖</span>
+          <span className="text-xs text-gray-600 italic line-clamp-3">{entry.text}</span>
         </div>
       </div>
     );
@@ -204,19 +233,19 @@ function TraceEntry({ entry }: { entry: LogEntry }) {
 
     return (
       <div className="flex items-start gap-2 py-1">
-        <span className="text-[9px] text-gray-300 shrink-0 mt-0.5 w-14">{ts}</span>
+        <span className="text-xs text-gray-300 shrink-0 mt-0.5 w-14">{ts}</span>
         <button
           onClick={() => setExpanded((v) => !v)}
           className="flex-1 min-w-0 text-left"
         >
           <div className="flex items-center gap-1.5">
-            <span className="text-[11px]">{icon}</span>
-            <span className="text-[11px] font-bold text-gray-700">{entry.name}</span>
-            <span className="text-[10px] text-gray-400 truncate max-w-xs">{inputSummary}</span>
-            <span className="text-[9px] text-gray-300 shrink-0">{expanded ? "▲" : "▼"}</span>
+            <span className="text-xs">{icon}</span>
+            <span className="text-xs font-bold text-gray-700">{entry.name}</span>
+            <span className="text-xs text-gray-400 truncate max-w-xs">{inputSummary}</span>
+            <span className="text-xs text-gray-300 shrink-0">{expanded ? "▲" : "▼"}</span>
           </div>
           {expanded && (
-            <div className="mt-1 ml-5 bg-gray-50 rounded p-2 font-mono text-[10px] text-gray-600 max-h-40 overflow-y-auto whitespace-pre-wrap">
+            <div className="mt-1 ml-5 bg-gray-50 rounded p-2 font-mono text-xs text-gray-600 max-h-40 overflow-y-auto whitespace-pre-wrap">
               {(() => {
                 try {
                   return JSON.stringify(JSON.parse(entry.input), null, 2);
@@ -235,28 +264,28 @@ function TraceEntry({ entry }: { entry: LogEntry }) {
     const isErr = entry.isError || (entry.exitCode !== undefined && entry.exitCode !== 0);
     return (
       <div className={`flex items-start gap-2 py-1 ${isErr ? "bg-red-50 -mx-1 px-1 rounded" : ""}`}>
-        <span className="text-[9px] text-gray-300 shrink-0 mt-0.5 w-14">{ts}</span>
+        <span className="text-xs text-gray-300 shrink-0 mt-0.5 w-14">{ts}</span>
         <button
           onClick={() => setExpanded((v) => !v)}
           className="flex-1 min-w-0 text-left"
         >
           <div className="flex items-center gap-1.5">
-            <span className="text-[11px]">{isErr ? "❌" : "✅"}</span>
+            <span className="text-xs">{isErr ? "❌" : "✅"}</span>
             {entry.exitCode !== undefined && (
-              <span className={`text-[10px] font-bold ${isErr ? "text-red-600" : "text-green-600"}`}>
+              <span className={`text-xs font-bold ${isErr ? "text-red-600" : "text-green-600"}`}>
                 exit:{entry.exitCode}
               </span>
             )}
-            <span className={`text-[10px] truncate max-w-xs ${isErr ? "text-red-500" : "text-gray-400"}`}>
+            <span className={`text-xs truncate max-w-xs ${isErr ? "text-red-500" : "text-gray-400"}`}>
               {entry.output.slice(0, 100)}
             </span>
             {entry.output.length > 100 && (
-              <span className="text-[9px] text-gray-300 shrink-0">{expanded ? "▲" : "▼"}</span>
+              <span className="text-xs text-gray-300 shrink-0">{expanded ? "▲" : "▼"}</span>
             )}
           </div>
           {expanded && (
             <div
-              className={`mt-1 ml-5 rounded p-2 font-mono text-[10px] max-h-40 overflow-y-auto whitespace-pre-wrap ${
+              className={`mt-1 ml-5 rounded p-2 font-mono text-xs max-h-40 overflow-y-auto whitespace-pre-wrap ${
                 isErr ? "bg-red-50 text-red-700" : "bg-gray-50 text-gray-600"
               }`}
             >
@@ -272,8 +301,8 @@ function TraceEntry({ entry }: { entry: LogEntry }) {
   if (entry.kind === "raw" && entry.text && entry.text.trim()) {
     return (
       <div className="flex items-start gap-2 py-0.5 opacity-40">
-        <span className="text-[9px] text-gray-300 shrink-0 mt-0.5 w-14">{ts}</span>
-        <span className="text-[10px] text-gray-400 font-mono truncate">{entry.text.slice(0, 100)}</span>
+        <span className="text-xs text-gray-300 shrink-0 mt-0.5 w-14">{ts}</span>
+        <span className="text-xs text-gray-400 font-mono truncate">{entry.text.slice(0, 100)}</span>
       </div>
     );
   }
@@ -346,7 +375,7 @@ export function RunTrace({ runId }: RunTraceProps) {
               {errors.length}개 오류 감지됨
             </div>
             {errors.slice(0, 2).map((e, i) => (
-              <div key={i} className="text-[11px] text-red-600 font-mono">
+              <div key={i} className="text-xs text-red-600 font-mono">
                 {e.kind === "tool_result"
                   ? `exit_code≠0: ${e.output.slice(0, 100)}`
                   : e.kind === "stderr"
@@ -366,20 +395,20 @@ export function RunTrace({ runId }: RunTraceProps) {
             className="w-full flex items-center justify-between px-3 py-2 bg-gray-50 hover:bg-gray-100 transition-colors"
           >
             <div className="flex items-center gap-2">
-              <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">컨텍스트</span>
+              <span className="text-xs font-black text-gray-400 uppercase tracking-widest">컨텍스트</span>
               {wakeReason && (
-                <span className="text-[10px] px-1.5 py-0.5 rounded bg-white text-gray-500 font-bold ring-1 ring-gray-200">
+                <span className="text-xs px-1.5 py-0.5 rounded bg-white text-gray-500 font-bold ring-1 ring-gray-200">
                   {wakeReason}
                 </span>
               )}
-              {adapterType && <span className="text-[10px] text-gray-400">{adapterType}</span>}
-              <span className="text-[10px] text-gray-400">{prompt.length.toLocaleString()}자</span>
+              {adapterType && <span className="text-xs text-gray-400">{adapterType}</span>}
+              <span className="text-xs text-gray-400">{prompt.length.toLocaleString()}자</span>
             </div>
             <span className={`text-gray-300 text-xs transition-transform ${showContext ? "rotate-180" : ""}`}>▼</span>
           </button>
           {showContext && (
             <div className="max-h-80 overflow-y-auto p-3 bg-white">
-              <pre className="text-[11px] text-gray-600 whitespace-pre-wrap font-mono leading-relaxed">
+              <pre className="text-xs text-gray-600 whitespace-pre-wrap font-mono leading-relaxed">
                 {prompt}
               </pre>
             </div>
@@ -392,7 +421,7 @@ export function RunTrace({ runId }: RunTraceProps) {
         <div className="text-xs text-gray-400 py-2 text-center">실행 로그 없음</div>
       ) : (
         <div className="space-y-0.5">
-          <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">실행 흐름</div>
+          <div className="text-xs font-black text-gray-400 uppercase tracking-widest mb-2">실행 흐름</div>
           {entries.map((entry, idx) => (
             <TraceEntry key={idx} entry={entry} />
           ))}
