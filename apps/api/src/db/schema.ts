@@ -177,6 +177,7 @@ export const heartbeatRuns = pgTable("heartbeat_runs", {
 	signal: text(),
 	usageJson: jsonb("usage_json"),
 	resultJson: jsonb("result_json"),
+	promptSnapshot: jsonb("prompt_snapshot"),
 	sessionIdBefore: text("session_id_before"),
 	sessionIdAfter: text("session_id_after"),
 	logStore: text("log_store"),
