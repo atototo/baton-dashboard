@@ -4,6 +4,8 @@ import { api } from "../lib/api.js";
 import { useQuery } from "../hooks/useQuery.js";
 import { KanbanBoard } from "../components/KanbanBoard.js";
 import { IssueList } from "../components/IssueList.js";
+import { NewIssueDialog } from "../components/NewIssueDialog.js";
+import { useCompany } from "../context/CompanyContext.js";
 
 const STATUS_STYLE: Record<string, string> = {
   backlog: "text-gray-600 bg-gray-50 border-gray-200",
@@ -27,6 +29,8 @@ export function ProjectDetail() {
   const { id, tab } = useParams<{ id: string; tab?: string }>();
   const navigate = useNavigate();
   const [viewMode, setViewMode] = useState<"kanban" | "list">("kanban");
+  const { selectedCompanyId } = useCompany();
+  const [showNewIssue, setShowNewIssue] = useState(false);
   
   const activeTab = tab || "issues";
 
@@ -92,6 +96,12 @@ export function ProjectDetail() {
               </div>
               <div className="flex items-center gap-2">
                 <button
+                  onClick={() => setShowNewIssue(true)}
+                  className="text-xs font-black text-white bg-blue-600 hover:bg-blue-700 px-3 py-1.5 rounded-lg transition-all shadow-sm shadow-blue-200"
+                >
+                  + New Issue
+                </button>
+                <button
                   onClick={handleRefresh}
                   className="text-xs font-bold text-gray-500 hover:text-gray-900 px-3 py-1.5 rounded-lg border border-gray-200 hover:bg-gray-50 bg-white transition-all"
                 >
@@ -112,10 +122,11 @@ export function ProjectDetail() {
               </div>
             ) : issues.data && issues.data.length > 0 ? (
               viewMode === "kanban" ? (
-                <KanbanBoard 
-                  issues={issues.data} 
-                  stats={stats.data ?? undefined} 
+                <KanbanBoard
+                  issues={issues.data}
+                  stats={stats.data ?? undefined}
                   onRefresh={handleRefresh}
+                  onCreateIssue={() => setShowNewIssue(true)}
                 />
               ) : (
                 <IssueList issues={issues.data} />
@@ -128,7 +139,10 @@ export function ProjectDetail() {
                   <p className="text-sm text-gray-500 font-medium">
                     This project doesn't have any issues. Create the first one to get started!
                   </p>
-                  <button className="inline-flex items-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-xl font-black text-sm hover:bg-blue-700 transition-all shadow-lg shadow-blue-200">
+                  <button
+                    onClick={() => setShowNewIssue(true)}
+                    className="inline-flex items-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-xl font-black text-sm hover:bg-blue-700 transition-all shadow-lg shadow-blue-200"
+                  >
                     Create First Issue
                   </button>
                 </div>
@@ -296,6 +310,15 @@ export function ProjectDetail() {
       <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
         {renderTabContent()}
       </div>
+
+      {showNewIssue && selectedCompanyId && (
+        <NewIssueDialog
+          companyId={selectedCompanyId}
+          projectId={id}
+          onCreated={handleRefresh}
+          onClose={() => setShowNewIssue(false)}
+        />
+      )}
     </div>
   );
 }

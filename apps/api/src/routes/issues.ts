@@ -336,3 +336,45 @@ issuesRoute.patch("/:id", async (c) => {
 
   return c.json(row);
 });
+
+// POST /api/issues - 이슈 생성
+issuesRoute.post("/", async (c) => {
+  const payload = await c.req.json().catch(() => null);
+  const title = typeof payload?.title === "string" ? payload.title.trim() : "";
+  const companyId = typeof payload?.companyId === "string" ? payload.companyId.trim() : "";
+
+  if (!title) return c.json({ error: "title is required" }, 400);
+  if (!companyId) return c.json({ error: "companyId is required" }, 400);
+
+  const projectId = typeof payload?.projectId === "string" ? payload.projectId : null;
+  const parentId = typeof payload?.parentId === "string" ? payload.parentId : null;
+  const priority = typeof payload?.priority === "string" ? payload.priority : "medium";
+  const description = typeof payload?.description === "string" ? payload.description : null;
+
+  const [inserted] = await db
+    .insert(schema.issues)
+    .values({
+      title,
+      companyId,
+      projectId,
+      parentId,
+      priority,
+      description,
+      status: "backlog",
+      createdByUserId: "dashboard-user",
+      requestDepth: 0,
+    })
+    .returning({ id: schema.issues.id });
+
+  if (!inserted) return c.json({ error: "Failed to create issue" }, 500);
+
+  const [row] = await db
+    .select(issueSummarySelect)
+    .from(schema.issues)
+    .leftJoin(schema.agents, eq(schema.issues.assigneeAgentId, schema.agents.id))
+    .leftJoin(schema.projects, eq(schema.issues.projectId, schema.projects.id))
+    .where(eq(schema.issues.id, inserted.id))
+    .limit(1);
+
+  return c.json(row, 201);
+});

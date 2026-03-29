@@ -6,6 +6,7 @@ interface KanbanBoardProps {
   issues: Issue[];
   stats?: ProjectStats;
   onRefresh?: () => void;
+  onCreateIssue?: () => void;
 }
 const COLUMNS = [
   { key: "backlog", title: "Backlog" },
@@ -17,7 +18,7 @@ const COLUMNS = [
   { key: "cancelled", title: "Cancelled" },
 ];
 
-export function KanbanBoard({ issues, stats, onRefresh }: KanbanBoardProps) {
+export function KanbanBoard({ issues, stats, onRefresh, onCreateIssue }: KanbanBoardProps) {
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: {
@@ -54,18 +55,29 @@ export function KanbanBoard({ issues, stats, onRefresh }: KanbanBoardProps) {
   };
 
   return (
-    <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
-      <div className="flex gap-6 overflow-x-auto pb-6 scrollbar-thin scrollbar-thumb-gray-200 scrollbar-track-transparent">
-        {COLUMNS.map((col) => (
-          <KanbanColumn
-            key={col.key}
-            title={col.title}
-            status={col.key}
-            issues={getIssuesByStatus(col.key)}
-            count={getCountByStatus(col.key)}
-          />
-        ))}
+    <>
+      <div className="flex justify-end mb-3">
+        <button
+          onClick={onCreateIssue}
+          disabled={!onCreateIssue}
+          className="text-xs font-black text-blue-600 border border-blue-200 bg-blue-50 hover:bg-blue-100 px-3 py-1.5 rounded-lg transition-all disabled:opacity-0"
+        >
+          + New Issue
+        </button>
       </div>
-    </DndContext>
+      <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
+        <div className="flex gap-6 overflow-x-auto pb-6 scrollbar-thin scrollbar-thumb-gray-200 scrollbar-track-transparent">
+          {COLUMNS.map((col) => (
+            <KanbanColumn
+              key={col.key}
+              title={col.title}
+              status={col.key}
+              issues={getIssuesByStatus(col.key)}
+              count={getCountByStatus(col.key)}
+            />
+          ))}
+        </div>
+      </DndContext>
+    </>
   );
 }

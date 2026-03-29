@@ -201,6 +201,22 @@ export const api = {
       return { total, byStatus };
     }
   },
+  createIssue: (data: {
+    title: string;
+    companyId: string;
+    projectId?: string | null;
+    parentId?: string | null;
+    priority?: string;
+    description?: string | null;
+  }) =>
+    fetch(`${BASE}/issues`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data),
+    }).then((res) => {
+      if (!res.ok) throw new Error("Failed to create issue");
+      return res.json() as Promise<Issue>;
+    }),
   getRunPromptSnapshot: (id: string) => fetchJson<any>(`/runs/${id}/prompt-snapshot`),
   getRunEvents: (id: string) => fetchJson<RunEvent[]>(`/runs/${id}/events`),
 };
