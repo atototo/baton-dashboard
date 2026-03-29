@@ -135,6 +135,39 @@ test("GET /api/issues/:id/timeline returns merged timeline events", async () => 
   assert.ok(["activity", "comment", "approval", "run"].includes(timeline[0].type));
 });
 
+test("GET /api/issues/:id returns assignee and project metadata", async () => {
+  const issue = await getIssueByIdentifier();
+
+  const response = await app.request(`/api/issues/${issue.id}`);
+
+  assert.equal(response.status, 200);
+
+  const detail = await response.json();
+  assert.equal(detail.id, issue.id);
+  assert.ok("agentName" in detail);
+  assert.ok("agentIcon" in detail);
+  assert.ok("projectName" in detail);
+});
+
+test("GET /api/issues/:id/timeline includes prompt snapshot data for run events", async () => {
+  const issue = await getIssueByIdentifier();
+
+  const response = await app.request(`/api/issues/${issue.id}/timeline`);
+
+  assert.equal(response.status, 200);
+
+  const timeline = await response.json();
+  const runEvent = timeline.find((event: { type: string; details?: { contextSnapshot?: { promptSnapshot?: unknown } } }) =>
+    event.type === "run",
+  );
+
+  assert.ok(runEvent, "expected at least one run event");
+  assert.ok(
+    runEvent.details?.contextSnapshot?.promptSnapshot,
+    "run events should expose promptSnapshot under details.contextSnapshot.promptSnapshot",
+  );
+});
+
 test("GET /api/runs/:id/prompt-snapshot returns the stored prompt snapshot", async () => {
   const runId = await getRunWithPromptSnapshot();
 

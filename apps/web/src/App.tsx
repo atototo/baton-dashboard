@@ -5,6 +5,7 @@ import { DashboardHome } from "./pages/DashboardHome";
 import { ProjectList } from "./pages/ProjectList";
 import { AgentListPage } from "./pages/AgentListPage";
 import { IssueListPage } from "./pages/IssueListPage";
+import { IssueDetail } from "./pages/IssueDetail";
 import { Monitoring } from "./pages/Monitoring";
 
 function App() {
@@ -15,7 +16,7 @@ function App() {
           <Route path="/" element={<Layout />}>
             <Route index element={<DashboardHome />} />
             <Route path="issues" element={<IssueListPage />} />
-            <Route path="issues/:id" element={<IssueListPage />} />
+            <Route path="issues/:id" element={<IssueDetail />} />
             <Route path="projects" element={<ProjectList />} />
             <Route path="projects/:id" element={<ProjectList />} />
             <Route path="agents" element={<AgentListPage />} />

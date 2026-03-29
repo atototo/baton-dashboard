@@ -4,6 +4,40 @@ import { eq, desc, and, sql, count, isNull, asc, inArray, or } from "drizzle-orm
 
 export const issuesRoute = new Hono();
 
+const issueSummarySelect = {
+  id: schema.issues.id,
+  companyId: schema.issues.companyId,
+  projectId: schema.issues.projectId,
+  goalId: schema.issues.goalId,
+  parentId: schema.issues.parentId,
+  title: schema.issues.title,
+  description: schema.issues.description,
+  status: schema.issues.status,
+  priority: schema.issues.priority,
+  assigneeAgentId: schema.issues.assigneeAgentId,
+  assigneeUserId: schema.issues.assigneeUserId,
+  createdByAgentId: schema.issues.createdByAgentId,
+  createdByUserId: schema.issues.createdByUserId,
+  requestDepth: schema.issues.requestDepth,
+  billingCode: schema.issues.billingCode,
+  startedAt: schema.issues.startedAt,
+  completedAt: schema.issues.completedAt,
+  cancelledAt: schema.issues.cancelledAt,
+  createdAt: schema.issues.createdAt,
+  updatedAt: schema.issues.updatedAt,
+  issueNumber: schema.issues.issueNumber,
+  identifier: schema.issues.identifier,
+  checkoutRunId: schema.issues.checkoutRunId,
+  executionRunId: schema.issues.executionRunId,
+  executionAgentNameKey: schema.issues.executionAgentNameKey,
+  executionLockedAt: schema.issues.executionLockedAt,
+  executionWorkspaceId: schema.issues.executionWorkspaceId,
+  delegation: schema.issues.delegation,
+  agentName: schema.agents.name,
+  agentIcon: schema.agents.icon,
+  projectName: schema.projects.name,
+};
+
 // GET /api/issues/stats/summary - 이슈 통계
 issuesRoute.get("/stats/summary", async (c) => {
   const result = await db
@@ -198,7 +232,12 @@ issuesRoute.get("/:id/timeline", async (c) => {
         'triggerDetail', ${schema.heartbeatRuns.triggerDetail},
         'startedAt', ${schema.heartbeatRuns.startedAt},
         'finishedAt', ${schema.heartbeatRuns.finishedAt},
-        'contextSnapshot', ${schema.heartbeatRuns.contextSnapshot}
+        'contextSnapshot', coalesce(${schema.heartbeatRuns.contextSnapshot}, '{}'::jsonb) ||
+          case
+            when ${schema.heartbeatRuns.promptSnapshot} is null then '{}'::jsonb
+            else jsonb_build_object('promptSnapshot', ${schema.heartbeatRuns.promptSnapshot})
+          end,
+        'promptSnapshot', ${schema.heartbeatRuns.promptSnapshot}
       )`,
     })
     .from(schema.heartbeatRuns)
@@ -227,23 +266,7 @@ issuesRoute.get("/", async (c) => {
   if (companyId) conditions.push(eq(schema.issues.companyId, companyId));
 
   const rows = await db
-    .select({
-      id: schema.issues.id,
-      title: schema.issues.title,
-      status: schema.issues.status,
-      priority: schema.issues.priority,
-      identifier: schema.issues.identifier,
-      projectId: schema.issues.projectId,
-      assigneeAgentId: schema.issues.assigneeAgentId,
-      parentId: schema.issues.parentId,
-      createdAt: schema.issues.createdAt,
-      updatedAt: schema.issues.updatedAt,
-      startedAt: schema.issues.startedAt,
-      completedAt: schema.issues.completedAt,
-      agentName: schema.agents.name,
-      agentIcon: schema.agents.icon,
-      projectName: schema.projects.name,
-    })
+    .select(issueSummarySelect)
     .from(schema.issues)
     .leftJoin(schema.agents, eq(schema.issues.assigneeAgentId, schema.agents.id))
     .leftJoin(schema.projects, eq(schema.issues.projectId, schema.projects.id))
@@ -260,8 +283,10 @@ issuesRoute.get("/:id", async (c) => {
   const id = c.req.param("id");
 
   const [row] = await db
-    .select()
+    .select(issueSummarySelect)
     .from(schema.issues)
+    .leftJoin(schema.agents, eq(schema.issues.assigneeAgentId, schema.agents.id))
+    .leftJoin(schema.projects, eq(schema.issues.projectId, schema.projects.id))
     .where(eq(schema.issues.id, id))
     .limit(1);
 
