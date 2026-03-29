@@ -264,6 +264,7 @@ issuesRoute.get("/", async (c) => {
   const status = c.req.query("status");
   const projectId = c.req.query("projectId");
   const companyId = c.req.query("companyId");
+  const parentId = c.req.query("parentId");
   const limit = Number(c.req.query("limit")) || 50;
   const offset = Number(c.req.query("offset")) || 0;
 
@@ -271,6 +272,7 @@ issuesRoute.get("/", async (c) => {
   if (status) conditions.push(eq(schema.issues.status, status));
   if (projectId) conditions.push(eq(schema.issues.projectId, projectId));
   if (companyId) conditions.push(eq(schema.issues.companyId, companyId));
+  if (parentId) conditions.push(eq(schema.issues.parentId, parentId));
 
   const rows = await db
     .select(issueSummarySelect)
