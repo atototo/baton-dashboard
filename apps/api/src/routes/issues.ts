@@ -65,12 +65,77 @@ const getIssueById = async (id: string) => {
       id: schema.issues.id,
       companyId: schema.issues.companyId,
       executionRunId: schema.issues.executionRunId,
+      executionWorkspaceId: schema.issues.executionWorkspaceId,
     })
     .from(schema.issues)
     .where(eq(schema.issues.id, id))
     .limit(1);
 
   return issue ?? null;
+};
+
+const approvalTypeToKind = (type: string) => {
+  switch (type) {
+    case "approve_issue_plan":
+      return "plan";
+    case "approve_pull_request":
+      return "pull_request";
+    case "approve_push_to_existing_pr":
+      return "push_to_existing_pr";
+    case "approve_completion":
+      return "completion";
+    case "agent_question":
+      return "question";
+    default:
+      return "approval";
+  }
+};
+
+const isTrueLike = (value: unknown) => value === true || value === "true";
+
+const asRecord = (value: unknown): Record<string, unknown> | null => {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  return value as Record<string, unknown>;
+};
+
+const asString = (value: unknown): string | null => (typeof value === "string" && value.length > 0 ? value : null);
+
+const asNumber = (value: unknown): number | null => {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string" && value.length > 0) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+};
+
+const coalesceString = (...values: unknown[]) => {
+  for (const value of values) {
+    const normalized = asString(value);
+    if (normalized) return normalized;
+  }
+
+  return null;
+};
+
+const toWorkflowStatus = (args: {
+  approvalStatus: string;
+  approvalType: string;
+  payload: Record<string, unknown> | null;
+}) => {
+  const { approvalStatus, approvalType, payload } = args;
+  const revision = approvalStatus === "rejected" || approvalStatus === "revision_requested";
+  const stale =
+    approvalType === "approve_push_to_existing_pr" &&
+    approvalStatus === "approved" &&
+    !asString(payload?.commitSha) &&
+    !isTrueLike(payload?.commitCreated);
+  const consumed = approvalStatus === "approved" && !revision && !stale;
+
+  if (stale) return { status: "stale", stale, revision, consumed };
+  if (revision) return { status: "revision", stale, revision, consumed };
+  if (consumed) return { status: "consumed", stale, revision, consumed };
+  return { status: approvalStatus, stale, revision, consumed };
 };
 
 // GET /api/issues/:id/comments - 이슈 코멘트 목록
@@ -99,6 +164,126 @@ issuesRoute.get("/:id/comments", async (c) => {
     .orderBy(asc(schema.issueComments.createdAt));
 
   return c.json(rows);
+});
+
+// GET /api/issues/:id/workflow-sessions - 이슈 workflow session 타임라인
+issuesRoute.get("/:id/workflow-sessions", async (c) => {
+  const id = c.req.param("id");
+  const issue = await getIssueById(id);
+
+  if (!issue) return c.json({ error: "Not found" }, 404);
+
+  const [workspace] = issue.executionWorkspaceId
+    ? await db
+        .select({
+          id: schema.executionWorkspaces.id,
+          branch: schema.executionWorkspaces.branch,
+          baseBranch: schema.executionWorkspaces.baseBranch,
+          lastBranchCommitSha: schema.executionWorkspaces.lastBranchCommitSha,
+          pullRequestUrl: schema.executionWorkspaces.pullRequestUrl,
+          pullRequestNumber: schema.executionWorkspaces.pullRequestNumber,
+          prOpenedAt: schema.executionWorkspaces.prOpenedAt,
+          lastPrCheckedAt: schema.executionWorkspaces.lastPrCheckedAt,
+        })
+        .from(schema.executionWorkspaces)
+        .where(eq(schema.executionWorkspaces.id, issue.executionWorkspaceId))
+        .limit(1)
+    : [];
+
+  const approvalRows = await db
+    .select({
+      approvalId: schema.approvals.id,
+      approvalType: schema.approvals.type,
+      approvalStatus: schema.approvals.status,
+      payload: schema.approvals.payload,
+      decisionNote: schema.approvals.decisionNote,
+      requestedByAgentId: schema.approvals.requestedByAgentId,
+      requestedByUserId: schema.approvals.requestedByUserId,
+      createdAt: schema.approvals.createdAt,
+      updatedAt: schema.approvals.updatedAt,
+      decidedAt: schema.approvals.decidedAt,
+    })
+    .from(schema.issueApprovals)
+    .innerJoin(schema.approvals, eq(schema.issueApprovals.approvalId, schema.approvals.id))
+    .where(eq(schema.issueApprovals.issueId, id))
+    .orderBy(asc(schema.approvals.createdAt));
+
+  const runRows = await db
+    .select({
+      id: schema.heartbeatRuns.id,
+      status: schema.heartbeatRuns.status,
+      invocationSource: schema.heartbeatRuns.invocationSource,
+      triggerDetail: schema.heartbeatRuns.triggerDetail,
+      createdAt: schema.heartbeatRuns.createdAt,
+      startedAt: schema.heartbeatRuns.startedAt,
+      finishedAt: schema.heartbeatRuns.finishedAt,
+      contextSnapshot: schema.heartbeatRuns.contextSnapshot,
+    })
+    .from(schema.heartbeatRuns)
+    .where(
+      and(
+        eq(schema.heartbeatRuns.companyId, issue.companyId),
+        or(
+          eq(sql<string>`${schema.heartbeatRuns.contextSnapshot} ->> 'issueId'`, id),
+          issue.executionRunId ? eq(schema.heartbeatRuns.id, issue.executionRunId) : undefined,
+        ),
+      ),
+    )
+    .orderBy(asc(schema.heartbeatRuns.createdAt));
+
+  const sessions = approvalRows.map((approval, index) => {
+    const nextApproval = approvalRows[index + 1];
+    const payload = asRecord(approval.payload);
+    const workflowState = toWorkflowStatus({
+      approvalStatus: approval.approvalStatus,
+      approvalType: approval.approvalType,
+      payload,
+    });
+    const sessionRuns = runRows.filter((run) => {
+      if (run.createdAt < approval.createdAt) return false;
+      if (!nextApproval) return true;
+      return run.createdAt < nextApproval.createdAt;
+    });
+    const latestRun = sessionRuns.at(-1) ?? null;
+    const isLatest = index === approvalRows.length - 1;
+
+    return {
+      id: approval.approvalId,
+      issueId: id,
+      approvalId: approval.approvalId,
+      approvalType: approval.approvalType,
+      approvalStatus: approval.approvalStatus,
+      kind: approvalTypeToKind(approval.approvalType),
+      status: workflowState.status,
+      epoch: index + 1,
+      stale: workflowState.stale,
+      revision: workflowState.revision,
+      consumed: workflowState.consumed,
+      branch: coalesceString(payload?.branch, workspace?.branch),
+      baseBranch: coalesceString(payload?.baseBranch, workspace?.baseBranch),
+      commitSha: coalesceString(payload?.commitSha, isLatest ? workspace?.lastBranchCommitSha : null),
+      pullRequestUrl: coalesceString(payload?.pullRequestUrl, isLatest ? workspace?.pullRequestUrl : null),
+      pullRequestNumber: asNumber(payload?.pullRequestNumber) ?? asNumber(isLatest ? workspace?.pullRequestNumber : null),
+      prOpenedAt: coalesceString(payload?.prOpenedAt, isLatest ? workspace?.prOpenedAt : null),
+      lastPrCheckedAt: isLatest ? workspace?.lastPrCheckedAt ?? null : null,
+      requestedByAgentId: approval.requestedByAgentId,
+      requestedByUserId: approval.requestedByUserId,
+      runId: latestRun?.id ?? null,
+      runStatus: latestRun?.status ?? null,
+      runInvocationSource: latestRun?.invocationSource ?? null,
+      runTriggerDetail: latestRun?.triggerDetail ?? null,
+      runStartedAt: latestRun?.startedAt ?? null,
+      runFinishedAt: latestRun?.finishedAt ?? null,
+      runCount: sessionRuns.length,
+      contextSnapshot: latestRun?.contextSnapshot ?? null,
+      decisionNote: approval.decisionNote,
+      createdAt: approval.createdAt,
+      decidedAt: approval.decidedAt,
+      updatedAt: approval.updatedAt,
+    };
+  });
+
+  return c.json(sessions.sort((left, right) => right.epoch - left.epoch));
 });
 
 // POST /api/issues/:id/comments - 이슈 코멘트 작성
