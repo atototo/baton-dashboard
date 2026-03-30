@@ -6,11 +6,6 @@ import { eq, desc, and, sql } from "drizzle-orm";
 
 export const agentsRoute = new Hono();
 
-const BATON_SKILL_SUMMARY = [
-  "Baton control-plane workflow for agent heartbeats, issue checkout, comments,",
-  "status handoff, approvals, and governed review transitions.",
-].join(" ");
-
 type JsonRecord = Record<string, unknown>;
 
 const isJsonRecord = (value: unknown): value is JsonRecord =>
@@ -86,11 +81,45 @@ const getProjectIdFromRun = (run: Awaited<ReturnType<typeof getLatestRun>>) => {
   );
 };
 
-const readInstructionFile = async (adapterConfig: unknown) => {
+const getManagedInstruction = async (agentId: string) => {
+  const [instruction] = await db
+    .select({
+      path: schema.agentInstructions.path,
+      content: schema.agentInstructions.content,
+      source: schema.agentInstructions.source,
+      updatedAt: schema.agentInstructions.updatedAt,
+    })
+    .from(schema.agentInstructions)
+    .where(
+      and(
+        eq(schema.agentInstructions.agentId, agentId),
+        eq(schema.agentInstructions.isEntryFile, true),
+      ),
+    )
+    .limit(1);
+
+  return instruction ?? null;
+};
+
+const readInstructionSource = async (agentId: string, adapterConfig: unknown) => {
   const config = isJsonRecord(adapterConfig) ? adapterConfig : {};
   const instructionsFilePath = asString(config.instructionsFilePath);
   const entryFile = asString(config.instructionsEntryFile) ?? (instructionsFilePath ? basename(instructionsFilePath) : null);
   const source = asString(config.instructionsBundleMode) ?? "file";
+
+  if (source === "managed") {
+    const managedInstruction = await getManagedInstruction(agentId);
+
+    if (managedInstruction) {
+      return {
+        source: managedInstruction.source,
+        entryFile: managedInstruction.path,
+        content: managedInstruction.content,
+        charCount: managedInstruction.content.length,
+        updatedAt: managedInstruction.updatedAt,
+      };
+    }
+  }
 
   if (!instructionsFilePath) {
     return {
@@ -124,6 +153,49 @@ const readInstructionFile = async (adapterConfig: unknown) => {
       updatedAt: null,
     };
   }
+};
+
+const getSkillLayer = async (companyId: string, latestRun: Awaited<ReturnType<typeof getLatestRun>>) => {
+  const promptSnapshot = isJsonRecord(latestRun?.promptSnapshot) ? latestRun.promptSnapshot : null;
+  const layers = promptSnapshot && isJsonRecord(promptSnapshot.layers) ? promptSnapshot.layers : null;
+  const batonSkillLayer = layers && isJsonRecord(layers.batonSkill) ? layers.batonSkill : null;
+  const skillName = asString(batonSkillLayer?.skillName) ?? "baton";
+
+  const [skillFile] = await db
+    .select({
+      skillName: schema.skillFiles.skillName,
+      path: schema.skillFiles.path,
+      content: schema.skillFiles.content,
+      updatedAt: schema.skillFiles.updatedAt,
+    })
+    .from(schema.skillFiles)
+    .where(
+      and(
+        eq(schema.skillFiles.companyId, companyId),
+        eq(schema.skillFiles.skillName, skillName),
+        eq(schema.skillFiles.path, "SKILL.md"),
+      ),
+    )
+    .orderBy(desc(schema.skillFiles.updatedAt))
+    .limit(1);
+
+  if (!skillFile) {
+    return {
+      source: "missing",
+      content: "",
+      metadata: { skillName, path: "SKILL.md", updatedAt: null },
+    };
+  }
+
+  return {
+    source: "database",
+    content: skillFile.content,
+    metadata: {
+      skillName: skillFile.skillName,
+      path: skillFile.path,
+      updatedAt: skillFile.updatedAt,
+    },
+  };
 };
 
 const getProjectConventions = async (projectId: string | null) => {
@@ -176,7 +248,7 @@ agentsRoute.get("/:id/instructions", async (c) => {
 
   if (!agent) return c.json({ error: "Not found" }, 404);
 
-  const instructions = await readInstructionFile(agent.adapterConfig);
+  const instructions = await readInstructionSource(agent.id, agent.adapterConfig);
 
   return c.json({
     agentId: id,
@@ -196,10 +268,11 @@ agentsRoute.get("/:id/prompt-stack", async (c) => {
   if (!agent) return c.json({ error: "Not found" }, 404);
 
   const [instructions, latestRun] = await Promise.all([
-    readInstructionFile(agent.adapterConfig),
+    readInstructionSource(agent.id, agent.adapterConfig),
     getLatestRun(id),
   ]);
   const projectConventions = await getProjectConventions(getProjectIdFromRun(latestRun));
+  const batonSkill = await getSkillLayer(agent.companyId, latestRun);
   const adapterConfig = isJsonRecord(agent.adapterConfig) ? agent.adapterConfig : {};
   const promptTemplateContent = asString(adapterConfig.promptTemplate) ?? "";
   const wakeContextSource =
@@ -222,9 +295,9 @@ agentsRoute.get("/:id/prompt-stack", async (c) => {
       order: 2,
       key: "batonSkill",
       label: "Baton Skill",
-      source: "fixed",
-      content: BATON_SKILL_SUMMARY,
-      metadata: null,
+      source: batonSkill.source,
+      content: batonSkill.content,
+      metadata: batonSkill.metadata,
     },
     {
       order: 3,

@@ -68,6 +68,42 @@ const getAgentWithPromptSnapshot = async () => {
   return row.id;
 };
 
+const getAgentInstructionEntry = async (agentId: string) => {
+  const [instruction] = await db
+    .select({
+      path: schema.agentInstructions.path,
+      content: schema.agentInstructions.content,
+      source: schema.agentInstructions.source,
+      updatedAt: schema.agentInstructions.updatedAt,
+    })
+    .from(schema.agentInstructions)
+    .where(
+      sql`${schema.agentInstructions.agentId} = ${agentId} and ${schema.agentInstructions.isEntryFile} = true`,
+    )
+    .limit(1);
+
+  assert.ok(instruction, "a managed entry instruction should exist");
+  return instruction;
+};
+
+const getBatonSkillSource = async () => {
+  const [skill] = await db
+    .select({
+      skillName: schema.skillFiles.skillName,
+      path: schema.skillFiles.path,
+      content: schema.skillFiles.content,
+      updatedAt: schema.skillFiles.updatedAt,
+    })
+    .from(schema.skillFiles)
+    .where(
+      sql`${schema.skillFiles.skillName} = 'baton' and ${schema.skillFiles.path} = 'SKILL.md'`,
+    )
+    .limit(1);
+
+  assert.ok(skill, "the baton skill source should exist");
+  return skill;
+};
+
 const getAgentWithoutRuns = async () => {
   const result = await db.execute(sql`
     select a.id
@@ -349,6 +385,7 @@ test("GET /api/runs/:id/events returns heartbeat run events", async () => {
 
 test("GET /api/agents/:id/instructions returns instruction content and metadata", async () => {
   const agentId = await getAgentWithPromptSnapshot();
+  const entryInstruction = await getAgentInstructionEntry(agentId);
 
   const response = await app.request(`/api/agents/${agentId}/instructions`);
 
@@ -356,15 +393,17 @@ test("GET /api/agents/:id/instructions returns instruction content and metadata"
 
   const instructions = await response.json();
   assert.equal(instructions.agentId, agentId);
-  assert.equal(typeof instructions.source, "string");
-  assert.equal(typeof instructions.content, "string");
+  assert.equal(instructions.source, entryInstruction.source);
+  assert.equal(instructions.content, entryInstruction.content);
   assert.equal(typeof instructions.charCount, "number");
   assert.equal(instructions.charCount, instructions.content.length);
-  assert.ok("entryFile" in instructions);
+  assert.equal(instructions.entryFile, entryInstruction.path);
+  assert.equal(instructions.updatedAt, entryInstruction.updatedAt);
 });
 
 test("GET /api/agents/:id/prompt-stack returns five ordered layers", async () => {
   const agentId = await getAgentWithPromptSnapshot();
+  const batonSkill = await getBatonSkillSource();
 
   const response = await app.request(`/api/agents/${agentId}/prompt-stack`);
 
@@ -384,6 +423,16 @@ test("GET /api/agents/:id/prompt-stack returns five ordered layers", async () =>
     layer.charCount === layer.content.length &&
     typeof layer.tokenEstimate === "number"
   ));
+
+  const batonSkillLayer = promptStack.layers.find((layer: { key: string }) => layer.key === "batonSkill");
+  assert.ok(batonSkillLayer);
+  assert.equal(batonSkillLayer.content, batonSkill.content);
+  assert.equal(batonSkillLayer.source, "database");
+  assert.deepEqual(batonSkillLayer.metadata, {
+    skillName: batonSkill.skillName,
+    path: batonSkill.path,
+    updatedAt: batonSkill.updatedAt,
+  });
 });
 
 test("GET /api/agents/:id/runs returns run items in descending order", async () => {
