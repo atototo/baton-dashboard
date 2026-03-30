@@ -18,7 +18,7 @@ const COLUMNS = [
   { key: "cancelled", title: "Cancelled" },
 ];
 
-export function KanbanBoard({ issues, stats, onRefresh, onCreateIssue }: KanbanBoardProps) {
+export function KanbanBoard({ issues, stats, onRefresh, onCreateIssue: _onCreateIssue }: KanbanBoardProps) {
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: {

@@ -54,6 +54,36 @@ const getRunWithEvents = async () => {
   return row.id;
 };
 
+const getAgentWithPromptSnapshot = async () => {
+  const result = await db.execute(sql`
+    select hr.agent_id as id
+    from heartbeat_runs hr
+    where hr.prompt_snapshot is not null
+    order by hr.created_at desc
+    limit 1
+  `);
+
+  const [row] = result as unknown as Array<{ id: string }>;
+  assert.ok(row?.id, "an agent with prompt_snapshot should exist");
+  return row.id;
+};
+
+const getAgentWithoutRuns = async () => {
+  const result = await db.execute(sql`
+    select a.id
+    from agents a
+    left join heartbeat_runs hr on hr.agent_id = a.id
+    group by a.id, a.created_at
+    having count(hr.id) = 0
+    order by a.created_at asc
+    limit 1
+  `);
+
+  const [row] = result as unknown as Array<{ id: string }>;
+  assert.ok(row?.id, "an agent without runs should exist");
+  return row.id;
+};
+
 test("GET /api/companies returns active companies", async () => {
   const response = await app.request("/api/companies");
 
@@ -315,6 +345,109 @@ test("GET /api/runs/:id/events returns heartbeat run events", async () => {
   assert.ok(Array.isArray(events));
   assert.ok(events.length > 0);
   assert.equal(events[0].runId, runId);
+});
+
+test("GET /api/agents/:id/instructions returns instruction content and metadata", async () => {
+  const agentId = await getAgentWithPromptSnapshot();
+
+  const response = await app.request(`/api/agents/${agentId}/instructions`);
+
+  assert.equal(response.status, 200);
+
+  const instructions = await response.json();
+  assert.equal(instructions.agentId, agentId);
+  assert.equal(typeof instructions.source, "string");
+  assert.equal(typeof instructions.content, "string");
+  assert.equal(typeof instructions.charCount, "number");
+  assert.equal(instructions.charCount, instructions.content.length);
+  assert.ok("entryFile" in instructions);
+});
+
+test("GET /api/agents/:id/prompt-stack returns five ordered layers", async () => {
+  const agentId = await getAgentWithPromptSnapshot();
+
+  const response = await app.request(`/api/agents/${agentId}/prompt-stack`);
+
+  assert.equal(response.status, 200);
+
+  const promptStack = await response.json();
+  assert.equal(promptStack.agentId, agentId);
+  assert.equal(Array.isArray(promptStack.layers), true);
+  assert.equal(promptStack.layers.length, 5);
+  assert.deepEqual(
+    promptStack.layers.map((layer: { key: string }) => layer.key),
+    ["agentInstructions", "batonSkill", "projectConventions", "wakeContext", "promptTemplate"],
+  );
+  assert.ok(promptStack.layers.every((layer: { content: string; charCount: number; tokenEstimate: number }) =>
+    typeof layer.content === "string" &&
+    typeof layer.charCount === "number" &&
+    layer.charCount === layer.content.length &&
+    typeof layer.tokenEstimate === "number"
+  ));
+});
+
+test("GET /api/agents/:id/runs returns run items in descending order", async () => {
+  const agentId = await getAgentWithPromptSnapshot();
+
+  const response = await app.request(`/api/agents/${agentId}/runs`);
+
+  assert.equal(response.status, 200);
+
+  const payload = await response.json();
+  assert.equal(payload.agentId, agentId);
+  assert.ok(Array.isArray(payload.items));
+  assert.ok(payload.items.length > 0);
+  assert.equal(payload.items[0].agentId, agentId);
+  assert.ok("usage" in payload.items[0]);
+});
+
+test("GET /api/agents/:id/costs returns aggregate totals and recent entries", async () => {
+  const agentId = await getAgentWithPromptSnapshot();
+
+  const response = await app.request(`/api/agents/${agentId}/costs`);
+
+  assert.equal(response.status, 200);
+
+  const payload = await response.json();
+  assert.equal(payload.agentId, agentId);
+  assert.equal(typeof payload.summary.totalInputTokens, "number");
+  assert.equal(typeof payload.summary.totalOutputTokens, "number");
+  assert.equal(typeof payload.summary.totalCostCents, "number");
+  assert.equal(Array.isArray(payload.byModel), true);
+  assert.equal(Array.isArray(payload.recent), true);
+});
+
+test("agent detail APIs return empty-state payloads when no runs or costs exist", async () => {
+  const agentId = await getAgentWithoutRuns();
+
+  const [runsResponse, costsResponse, promptStackResponse] = await Promise.all([
+    app.request(`/api/agents/${agentId}/runs`),
+    app.request(`/api/agents/${agentId}/costs`),
+    app.request(`/api/agents/${agentId}/prompt-stack`),
+  ]);
+
+  assert.equal(runsResponse.status, 200);
+  assert.equal(costsResponse.status, 200);
+  assert.equal(promptStackResponse.status, 200);
+
+  const runsPayload = await runsResponse.json();
+  const costsPayload = await costsResponse.json();
+  const promptStackPayload = await promptStackResponse.json();
+
+  assert.deepEqual(runsPayload.items, []);
+  assert.equal(costsPayload.summary.totalInputTokens, 0);
+  assert.equal(costsPayload.summary.totalOutputTokens, 0);
+  assert.equal(costsPayload.summary.totalCostCents, 0);
+  assert.deepEqual(costsPayload.recent, []);
+  assert.equal(promptStackPayload.layers.length, 5);
+});
+
+test("agent detail APIs return 404 for an unknown agent id", async () => {
+  for (const path of ["instructions", "prompt-stack", "runs", "costs"]) {
+    const response = await app.request(`/api/agents/${missingCompanyId}/${path}`);
+
+    assert.equal(response.status, 404);
+  }
 });
 
 test.after(async () => {
