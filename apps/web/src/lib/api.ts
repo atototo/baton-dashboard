@@ -153,6 +153,77 @@ export interface ProjectStats {
   byStatus: Record<string, number>;
 }
 
+export interface AgentInstructions {
+  agentId: string;
+  source: string;
+  entryFile: string;
+  content: string;
+  charCount: number;
+  updatedAt: string;
+}
+
+export interface PromptLayer {
+  order: number;
+  key: string;
+  label: string;
+  source: string;
+  content: string;
+  charCount: number;
+  tokenEstimate: number;
+  metadata: Record<string, unknown> | null;
+}
+
+export interface PromptStack {
+  agentId: string;
+  composedAt: string | null;
+  totalChars: number;
+  layers: PromptLayer[];
+}
+
+export interface AgentRun {
+  id: string;
+  agentId: string;
+  status: string;
+  invocationSource: string;
+  triggerDetail: string | null;
+  startedAt: string;
+  finishedAt: string | null;
+  createdAt: string;
+  error: string | null;
+  usage: Record<string, unknown> | null;
+}
+
+export interface AgentRuns {
+  agentId: string;
+  items: AgentRun[];
+}
+
+export interface AgentCosts {
+  agentId: string;
+  summary: {
+    totalEvents: number;
+    totalInputTokens: number;
+    totalOutputTokens: number;
+    totalCostCents: number;
+  };
+  byModel: Array<{
+    provider: string;
+    model: string;
+    eventCount: number;
+    totalInputTokens: number;
+    totalOutputTokens: number;
+    totalCostCents: number;
+  }>;
+  recent: Array<{
+    provider: string;
+    model: string;
+    inputTokens: number;
+    outputTokens: number;
+    costCents: number;
+    occurredAt: string;
+  }>;
+}
+
 export const api = {
   getOverview: (companyId?: string) => {
     const qs = companyId ? `?companyId=${companyId}` : "";
@@ -228,4 +299,8 @@ export const api = {
   getRunPromptSnapshot: (id: string) => fetchJson<any>(`/runs/${id}/prompt-snapshot`),
   getRunEvents: (id: string) => fetchJson<RunEvent[]>(`/runs/${id}/events`),
   getRunLog: (id: string) => fetchJson<RunLog>(`/runs/${id}/log`),
+  getAgentInstructions: (id: string) => fetchJson<AgentInstructions>(`/agents/${id}/instructions`),
+  getAgentPromptStack: (id: string) => fetchJson<PromptStack>(`/agents/${id}/prompt-stack`),
+  getAgentRuns: (id: string) => fetchJson<AgentRuns>(`/agents/${id}/runs`),
+  getAgentCosts: (id: string) => fetchJson<AgentCosts>(`/agents/${id}/costs`),
 };

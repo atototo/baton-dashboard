@@ -51,7 +51,35 @@ export const approvals = pgTable("approvals", {
 			columns: [table.requestedByAgentId],
 			foreignColumns: [agents.id],
 			name: "approvals_requested_by_agent_id_agents_id_fk"
-		}),
+	}),
+]);
+
+export const agentInstructions = pgTable("agent_instructions", {
+	id: uuid().defaultRandom().primaryKey().notNull(),
+	companyId: uuid("company_id").notNull(),
+	agentId: uuid("agent_id").notNull(),
+	path: text().notNull(),
+	content: text().notNull(),
+	isEntryFile: boolean("is_entry_file").default(false).notNull(),
+	source: text().notNull(),
+	contentHash: text("content_hash").notNull(),
+	syncedFrom: text("synced_from"),
+	syncedAt: timestamp("synced_at", { withTimezone: true, mode: 'string' }),
+	createdAt: timestamp("created_at", { withTimezone: true, mode: 'string' }).defaultNow().notNull(),
+	updatedAt: timestamp("updated_at", { withTimezone: true, mode: 'string' }).defaultNow().notNull(),
+}, (table) => [
+	index("agent_instructions_agent_idx").using("btree", table.agentId.asc().nullsLast().op("uuid_ops")),
+	index("agent_instructions_company_agent_idx").using("btree", table.companyId.asc().nullsLast().op("uuid_ops"), table.agentId.asc().nullsLast().op("uuid_ops")),
+	foreignKey({
+			columns: [table.companyId],
+			foreignColumns: [companies.id],
+			name: "agent_instructions_company_id_companies_id_fk"
+		}).onDelete("cascade"),
+	foreignKey({
+			columns: [table.agentId],
+			foreignColumns: [agents.id],
+			name: "agent_instructions_agent_id_agents_id_fk"
+		}).onDelete("cascade"),
 ]);
 
 export const costEvents = pgTable("cost_events", {
@@ -1006,6 +1034,24 @@ export const projectConventions = pgTable("project_conventions", {
 			name: "project_conventions_project_id_projects_id_fk"
 		}).onDelete("cascade"),
 	unique("project_conventions_company_project_uniq").on(table.companyId, table.projectId),
+]);
+
+export const skillFiles = pgTable("skill_files", {
+	id: uuid().defaultRandom().primaryKey().notNull(),
+	companyId: uuid("company_id").notNull(),
+	skillName: text("skill_name").notNull(),
+	path: text().notNull(),
+	content: text().notNull(),
+	contentHash: text("content_hash").notNull(),
+	updatedAt: timestamp("updated_at", { withTimezone: true, mode: 'string' }).defaultNow().notNull(),
+	createdAt: timestamp("created_at", { withTimezone: true, mode: 'string' }).defaultNow().notNull(),
+}, (table) => [
+	index("skill_files_company_skill_idx").using("btree", table.companyId.asc().nullsLast().op("uuid_ops"), table.skillName.asc().nullsLast().op("text_ops")),
+	foreignKey({
+			columns: [table.companyId],
+			foreignColumns: [companies.id],
+			name: "skill_files_company_id_companies_id_fk"
+		}).onDelete("cascade"),
 ]);
 
 export const issueLabels = pgTable("issue_labels", {
