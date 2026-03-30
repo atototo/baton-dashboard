@@ -4,8 +4,9 @@ import { api, type Issue } from "../lib/api.js";
 import { IssueTimeline } from "../components/IssueTimeline.js";
 import { CommentThread } from "../components/CommentThread.js";
 import { IssueList } from "../components/IssueList.js";
+import { WorkflowSessionTimeline } from "../components/WorkflowSessionTimeline.js";
 
-type Tab = "details" | "comments" | "timeline" | "subtasks";
+type Tab = "details" | "comments" | "timeline" | "workflow" | "subtasks";
 
 // ── Edit Modal ────────────────────────────────────────────────────────────────
 
@@ -230,6 +231,8 @@ export function IssueDetail() {
         return <CommentThread issueId={issue.id} />;
       case "timeline":
         return <IssueTimeline issueId={issue.id} />;
+      case "workflow":
+        return <WorkflowSessionTimeline issueId={issue.id} />;
       case "subtasks":
         return (
           <div className="space-y-6">
@@ -301,7 +304,7 @@ export function IssueDetail() {
 
       {/* Tabs */}
       <div className="flex border-b border-gray-200 overflow-x-auto no-scrollbar shrink-0 px-6">
-        {(["details", "comments", "timeline", "subtasks"] as Tab[]).map((tab) => (
+        {(["details", "comments", "timeline", "workflow", "subtasks"] as Tab[]).map((tab) => (
           <button
             key={tab}
             onClick={() => setActiveTab(tab)}

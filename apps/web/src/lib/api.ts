@@ -224,6 +224,41 @@ export interface AgentCosts {
   }>;
 }
 
+export interface WorkflowSession {
+  id: string;
+  issueId: string;
+  approvalId: string;
+  approvalType: string;
+  approvalStatus: string;
+  kind: string;
+  status: string;
+  epoch: number;
+  stale: boolean;
+  revision: boolean;
+  consumed: boolean;
+  branch: string | null;
+  baseBranch: string | null;
+  commitSha: string | null;
+  pullRequestUrl: string | null;
+  pullRequestNumber: number | null;
+  prOpenedAt: string | null;
+  lastPrCheckedAt: string | null;
+  requestedByAgentId: string | null;
+  requestedByUserId: string | null;
+  runId: string | null;
+  runStatus: string | null;
+  runInvocationSource: string | null;
+  runTriggerDetail: string | null;
+  runStartedAt: string | null;
+  runFinishedAt: string | null;
+  runCount: number;
+  contextSnapshot: unknown | null;
+  decisionNote: string | null;
+  createdAt: string;
+  decidedAt: string | null;
+  updatedAt: string;
+}
+
 export const api = {
   getOverview: (companyId?: string) => {
     const qs = companyId ? `?companyId=${companyId}` : "";
@@ -259,6 +294,7 @@ export const api = {
       return res.json() as Promise<IssueComment>;
     }),
   getIssueTimeline: (id: string) => fetchJson<TimelineEvent[]>(`/issues/${id}/timeline`),
+  getIssueWorkflowSessions: (id: string) => fetchJson<WorkflowSession[]>(`/issues/${id}/workflow-sessions`),
   getAgents: (companyId?: string) => {
     const qs = companyId ? `?companyId=${companyId}` : "";
     return fetchJson<Agent[]>(`/agents${qs}`);

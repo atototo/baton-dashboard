@@ -10,7 +10,7 @@ const { db, schema, closeDb } = await import("./db/index.js");
 const missingCompanyId = "00000000-0000-0000-0000-000000000000";
 const issueIdentifier = "DOB-147";
 
-const getIssueByIdentifier = async () => {
+const getIssueByIdentifier = async (identifier = issueIdentifier) => {
   const [issue] = await db
     .select({
       id: schema.issues.id,
@@ -18,10 +18,10 @@ const getIssueByIdentifier = async () => {
       projectId: schema.issues.projectId,
     })
     .from(schema.issues)
-    .where(eq(schema.issues.identifier, issueIdentifier))
+    .where(eq(schema.issues.identifier, identifier))
     .limit(1);
 
-  assert.ok(issue, `${issueIdentifier} should exist in the shared Baton DB`);
+  assert.ok(issue, `${identifier} should exist in the shared Baton DB`);
   return issue;
 };
 
@@ -160,6 +160,42 @@ test("GET /api/issues/:id/comments returns the issue comment thread", async () =
   assert.ok(comments.length > 0);
   assert.equal(comments[0].issueId, issue.id);
   assert.equal(typeof comments[0].body, "string");
+});
+
+test("GET /api/issues/:id/workflow-sessions returns normalized workflow sessions", async () => {
+  const issue = await getIssueByIdentifier("DOB-184");
+
+  const response = await app.request(`/api/issues/${issue.id}/workflow-sessions`);
+
+  assert.equal(response.status, 200);
+
+  const sessions = await response.json();
+  assert.ok(Array.isArray(sessions));
+  assert.ok(sessions.length >= 2);
+
+  const [latest] = sessions;
+  assert.equal(latest.issueId, issue.id);
+  assert.equal(typeof latest.status, "string");
+  assert.equal(typeof latest.kind, "string");
+  assert.equal(typeof latest.epoch, "number");
+  assert.equal(typeof latest.approvalId, "string");
+  assert.equal(typeof latest.branch, "string");
+  assert.equal(typeof latest.baseBranch, "string");
+  assert.equal(typeof latest.createdAt, "string");
+  assert.equal(typeof latest.updatedAt, "string");
+  assert.equal(typeof latest.stale, "boolean");
+  assert.equal(typeof latest.revision, "boolean");
+  assert.equal(typeof latest.consumed, "boolean");
+
+  const revisionSession = sessions.find((session: { revision: boolean; approvalStatus: string }) =>
+    session.revision && session.approvalStatus === "rejected",
+  );
+  assert.ok(revisionSession, "expected at least one rejected revision session");
+
+  const consumedSession = sessions.find((session: { consumed: boolean; commitSha: string | null }) =>
+    session.consumed && typeof session.commitSha === "string",
+  );
+  assert.ok(consumedSession, "expected at least one consumed session with commit metadata");
 });
 
 test("GET /api/issues/stats/summary filters by companyId and projectId", async () => {
