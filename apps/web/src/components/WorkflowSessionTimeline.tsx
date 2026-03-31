@@ -254,14 +254,14 @@ export function WorkflowSessionTimeline({ issueId }: WorkflowSessionTimelineProp
       {/* Workflow Stepper - 현재 단계 시각화 */}
       <WorkflowStepper sessions={sessions} />
 
-      {/* Summary Section */}
+      {/* Current State Summary */}
       <div className="bg-white border border-gray-200 rounded-xl p-6 shadow-sm">
-        <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center justify-between mb-6">
           <div>
             <h2 className="text-sm font-black text-gray-900 uppercase tracking-tight mb-1">
-              Workflow Sessions ({sessions.length})
+              Current Status
             </h2>
-            <p className="text-xs text-gray-500">워크플로우 진행 이력 요약</p>
+            <p className="text-xs text-gray-500">현재 워크플로우 상태</p>
           </div>
           <button
             onClick={() => setShowDetailedTrace(!showDetailedTrace)}
@@ -271,39 +271,160 @@ export function WorkflowSessionTimeline({ issueId }: WorkflowSessionTimelineProp
           </button>
         </div>
 
-        {/* Key Metrics */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <div className="bg-gray-50 rounded-lg p-3 border border-gray-100">
-            <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">
-              Total Sessions
-            </div>
-            <div className="text-xl font-black text-gray-900">{sessions.length}</div>
-          </div>
-          <div className="bg-emerald-50 rounded-lg p-3 border border-emerald-100">
-            <div className="text-[10px] font-black text-emerald-600 uppercase tracking-widest mb-1">
-              Completed
-            </div>
-            <div className="text-xl font-black text-emerald-700">
-              {sessions.filter((s) => s.status === "consumed").length}
-            </div>
-          </div>
-          <div className="bg-amber-50 rounded-lg p-3 border border-amber-100">
-            <div className="text-[10px] font-black text-amber-600 uppercase tracking-widest mb-1">
-              Stale
-            </div>
-            <div className="text-xl font-black text-amber-700">
-              {sessions.filter((s) => s.stale).length}
-            </div>
-          </div>
-          <div className="bg-purple-50 rounded-lg p-3 border border-purple-100">
-            <div className="text-[10px] font-black text-purple-600 uppercase tracking-widest mb-1">
-              Revisions
-            </div>
-            <div className="text-xl font-black text-purple-700">
-              {sessions.filter((s) => s.revision).length}
-            </div>
-          </div>
-        </div>
+        {(() => {
+          // 현재 단계 판별 (WorkflowStepper 로직과 동일)
+          const hasImplementation = sessions.some(
+            (s) => s.kind === "pull_request" || s.kind === "push_to_existing_pr" || s.pullRequestUrl
+          );
+          const hasReview = sessions.some((s) => s.approvalType && s.approvalStatus !== "pending");
+          const hasCompletion = sessions.some((s) => s.kind === "completion" || s.status === "consumed");
+
+          let currentStage = "계획";
+          let currentStageIcon = "📋";
+          if (hasCompletion) {
+            currentStage = "완료";
+            currentStageIcon = "✅";
+          } else if (hasReview) {
+            currentStage = "검토";
+            currentStageIcon = "👀";
+          } else if (hasImplementation) {
+            currentStage = "구현";
+            currentStageIcon = "⚙️";
+          }
+
+          // 최근 session (가장 최근 createdAt 기준)
+          const recentSession = sessions.length > 0 ? sessions[0] : null;
+
+          // approval 상태 집계
+          const pendingApprovals = sessions.filter((s) => s.approvalStatus === "pending").length;
+          const approvedApprovals = sessions.filter((s) => s.approvalStatus === "approved").length;
+          const rejectedApprovals = sessions.filter((s) => s.approvalStatus === "rejected").length;
+
+          return (
+            <>
+              {/* 현재 단계 및 최근 상태 */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                {/* 현재 단계 */}
+                <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl p-4 border border-blue-200">
+                  <div className="text-[10px] font-black text-blue-600 uppercase tracking-widest mb-2">
+                    Current Stage
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-3xl">{currentStageIcon}</span>
+                    <span className="text-2xl font-black text-gray-900">{currentStage}</span>
+                  </div>
+                </div>
+
+                {/* 최근 Session 정보 */}
+                {recentSession && (
+                  <div className="bg-gray-50 rounded-xl p-4 border border-gray-200">
+                    <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">
+                      Latest Activity
+                    </div>
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2">
+                        <span className="text-lg">{KIND_ICONS[recentSession.kind] ?? "📌"}</span>
+                        <span className="text-sm font-bold text-gray-700">
+                          {KIND_LABELS[recentSession.kind] ?? recentSession.kind}
+                        </span>
+                        <span className={`ml-auto px-2 py-0.5 rounded text-[10px] font-bold border ${STATUS_COLORS[recentSession.status] ?? "bg-gray-50 text-gray-600 border-gray-200"}`}>
+                          {STATUS_LABELS[recentSession.status] ?? recentSession.status}
+                        </span>
+                      </div>
+                      <div className="text-xs text-gray-500 font-mono">
+                        {formatTime(recentSession.createdAt)}
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Workflow 메타 정보 (branch, PR, commit, approval) */}
+              {recentSession && (recentSession.branch || recentSession.pullRequestUrl || recentSession.commitSha || recentSession.approvalId) && (
+                <div className="bg-white border border-gray-200 rounded-xl p-4 mb-6">
+                  <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3">
+                    Workflow Details
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+                    {recentSession.branch && (
+                      <div>
+                        <span className="text-[10px] font-black text-gray-400 uppercase tracking-wider block mb-1">
+                          Branch
+                        </span>
+                        <div className="text-gray-900 font-semibold font-mono">{recentSession.branch}</div>
+                      </div>
+                    )}
+                    {recentSession.commitSha && (
+                      <div>
+                        <span className="text-[10px] font-black text-gray-400 uppercase tracking-wider block mb-1">
+                          Commit
+                        </span>
+                        <div className="text-gray-900 font-mono">{recentSession.commitSha.slice(0, 7)}</div>
+                      </div>
+                    )}
+                    {recentSession.pullRequestUrl && (
+                      <div className="col-span-2">
+                        <span className="text-[10px] font-black text-gray-400 uppercase tracking-wider block mb-1">
+                          Pull Request
+                        </span>
+                        <div className="flex items-center gap-2">
+                          <span className="text-gray-900 font-semibold">#{recentSession.pullRequestNumber}</span>
+                          <a
+                            href={recentSession.pullRequestUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-blue-600 hover:text-blue-700 underline truncate"
+                          >
+                            {recentSession.pullRequestUrl}
+                          </a>
+                        </div>
+                      </div>
+                    )}
+                    {recentSession.approvalId && (
+                      <div>
+                        <span className="text-[10px] font-black text-gray-400 uppercase tracking-wider block mb-1">
+                          Approval
+                        </span>
+                        <div className="text-gray-900 font-mono text-xs">{recentSession.approvalId.slice(0, 8)}</div>
+                        {recentSession.approvalType && (
+                          <div className="text-gray-600 text-[10px] mt-0.5">{recentSession.approvalType}</div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Session Statistics */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <div className="bg-gray-50 rounded-lg p-3 border border-gray-100">
+                  <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">
+                    Total
+                  </div>
+                  <div className="text-lg font-black text-gray-900">{sessions.length}</div>
+                </div>
+                <div className="bg-blue-50 rounded-lg p-3 border border-blue-100">
+                  <div className="text-[10px] font-black text-blue-600 uppercase tracking-widest mb-1">
+                    Pending
+                  </div>
+                  <div className="text-lg font-black text-blue-700">{pendingApprovals}</div>
+                </div>
+                <div className="bg-emerald-50 rounded-lg p-3 border border-emerald-100">
+                  <div className="text-[10px] font-black text-emerald-600 uppercase tracking-widest mb-1">
+                    Approved
+                  </div>
+                  <div className="text-lg font-black text-emerald-700">{approvedApprovals}</div>
+                </div>
+                <div className="bg-red-50 rounded-lg p-3 border border-red-100">
+                  <div className="text-[10px] font-black text-red-600 uppercase tracking-widest mb-1">
+                    Rejected
+                  </div>
+                  <div className="text-lg font-black text-red-700">{rejectedApprovals}</div>
+                </div>
+              </div>
+            </>
+          );
+        })()}
       </div>
 
       {/* Detailed Trace (conditional) */}
