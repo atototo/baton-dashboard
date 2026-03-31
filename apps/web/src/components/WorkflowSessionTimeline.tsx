@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api, type WorkflowSession } from "../lib/api";
+import { WorkflowStepper } from "./WorkflowStepper";
 
 interface WorkflowSessionTimelineProps {
   issueId: string;
@@ -12,6 +13,16 @@ function formatTime(ts: string) {
   });
 }
 
+// 한글 번역 매핑
+const STATUS_LABELS: Record<string, string> = {
+  consumed: "완료됨",
+  stale: "만료됨",
+  revision: "재검토",
+  pending: "대기 중",
+  approved: "승인됨",
+  rejected: "거부됨",
+};
+
 const STATUS_COLORS: Record<string, string> = {
   consumed: "bg-emerald-50 text-emerald-700 border-emerald-200",
   stale: "bg-amber-50 text-amber-700 border-amber-200",
@@ -19,6 +30,15 @@ const STATUS_COLORS: Record<string, string> = {
   pending: "bg-gray-50 text-gray-600 border-gray-200",
   approved: "bg-blue-50 text-blue-700 border-blue-200",
   rejected: "bg-red-50 text-red-700 border-red-200",
+};
+
+const KIND_LABELS: Record<string, string> = {
+  plan: "계획",
+  pull_request: "PR 생성",
+  push_to_existing_pr: "PR 업데이트",
+  completion: "완료",
+  question: "질문",
+  approval: "승인",
 };
 
 const KIND_ICONS: Record<string, string> = {
@@ -32,7 +52,9 @@ const KIND_ICONS: Record<string, string> = {
 
 function SessionCard({ session }: { session: WorkflowSession }) {
   const statusColor = STATUS_COLORS[session.status] ?? "bg-gray-50 text-gray-600 border-gray-200";
+  const statusLabel = STATUS_LABELS[session.status] ?? session.status;
   const kindIcon = KIND_ICONS[session.kind] ?? "📌";
+  const kindLabel = KIND_LABELS[session.kind] ?? session.kind;
 
   return (
     <div className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm hover:shadow-md transition-shadow">
@@ -41,13 +63,13 @@ function SessionCard({ session }: { session: WorkflowSession }) {
         <div className="flex items-center gap-1.5">
           <span className="text-lg">{kindIcon}</span>
           <span className="text-xs font-black text-gray-400 uppercase tracking-widest">
-            Epoch {session.epoch}
+            Round {session.epoch}
           </span>
         </div>
         <span className="text-xs text-gray-300">•</span>
-        <span className="text-xs font-bold text-gray-600">{session.kind}</span>
-        <span className={`ml-auto px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wide border ${statusColor}`}>
-          {session.status}
+        <span className="text-xs font-bold text-gray-700">{kindLabel}</span>
+        <span className={`ml-auto px-2 py-0.5 rounded text-[10px] font-bold tracking-wide border ${statusColor}`}>
+          {statusLabel}
         </span>
       </div>
 
@@ -173,6 +195,7 @@ export function WorkflowSessionTimeline({ issueId }: WorkflowSessionTimelineProp
   const [sessions, setSessions] = useState<WorkflowSession[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [showDetailedTrace, setShowDetailedTrace] = useState(false);
 
   useEffect(() => {
     const fetchSessions = async () => {
@@ -228,17 +251,75 @@ export function WorkflowSessionTimeline({ issueId }: WorkflowSessionTimelineProp
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between mb-4">
-        <h2 className="text-sm font-black text-gray-900 uppercase tracking-tight">
-          Workflow Sessions ({sessions.length})
-        </h2>
-        <p className="text-xs text-gray-500">최신 세션부터 표시됩니다</p>
+      {/* Workflow Stepper - 현재 단계 시각화 */}
+      <WorkflowStepper sessions={sessions} />
+
+      {/* Summary Section */}
+      <div className="bg-white border border-gray-200 rounded-xl p-6 shadow-sm">
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h2 className="text-sm font-black text-gray-900 uppercase tracking-tight mb-1">
+              Workflow Sessions ({sessions.length})
+            </h2>
+            <p className="text-xs text-gray-500">워크플로우 진행 이력 요약</p>
+          </div>
+          <button
+            onClick={() => setShowDetailedTrace(!showDetailedTrace)}
+            className="px-3 py-1.5 text-xs font-bold text-gray-600 hover:text-gray-900 border border-gray-200 hover:border-gray-400 rounded-lg transition-colors"
+          >
+            {showDetailedTrace ? "요약 보기" : "상세 보기"}
+          </button>
+        </div>
+
+        {/* Key Metrics */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="bg-gray-50 rounded-lg p-3 border border-gray-100">
+            <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">
+              Total Sessions
+            </div>
+            <div className="text-xl font-black text-gray-900">{sessions.length}</div>
+          </div>
+          <div className="bg-emerald-50 rounded-lg p-3 border border-emerald-100">
+            <div className="text-[10px] font-black text-emerald-600 uppercase tracking-widest mb-1">
+              Completed
+            </div>
+            <div className="text-xl font-black text-emerald-700">
+              {sessions.filter((s) => s.status === "consumed").length}
+            </div>
+          </div>
+          <div className="bg-amber-50 rounded-lg p-3 border border-amber-100">
+            <div className="text-[10px] font-black text-amber-600 uppercase tracking-widest mb-1">
+              Stale
+            </div>
+            <div className="text-xl font-black text-amber-700">
+              {sessions.filter((s) => s.stale).length}
+            </div>
+          </div>
+          <div className="bg-purple-50 rounded-lg p-3 border border-purple-100">
+            <div className="text-[10px] font-black text-purple-600 uppercase tracking-widest mb-1">
+              Revisions
+            </div>
+            <div className="text-xl font-black text-purple-700">
+              {sessions.filter((s) => s.revision).length}
+            </div>
+          </div>
+        </div>
       </div>
-      <div className="space-y-4">
-        {sessions.map((session) => (
-          <SessionCard key={session.id} session={session} />
-        ))}
-      </div>
+
+      {/* Detailed Trace (conditional) */}
+      {showDetailedTrace && (
+        <div className="space-y-4">
+          <div className="flex items-center gap-2 px-2">
+            <span className="text-xs font-black text-gray-400 uppercase tracking-widest">
+              Detailed Trace
+            </span>
+            <span className="text-xs text-gray-500">최신 세션부터 표시됩니다</span>
+          </div>
+          {sessions.map((session) => (
+            <SessionCard key={session.id} session={session} />
+          ))}
+        </div>
+      )}
     </div>
   );
 }
