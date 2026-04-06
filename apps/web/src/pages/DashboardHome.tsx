@@ -45,13 +45,59 @@ export function DashboardHome() {
       ) : stats.error ? (
         <div className="text-red-500 text-sm">Error: {stats.error}</div>
       ) : stats.data ? (
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-          <StatCard label="Total Issues" value={stats.data.issues.total} />
-          <StatCard label="Backlog" value={stats.data.issues.backlog} color="text-gray-600" />
-          <StatCard label="In Progress" value={stats.data.issues.inProgress} color="text-blue-600" />
-          <StatCard label="In Review" value={stats.data.issues.inReview} color="text-yellow-600" />
-          <StatCard label="Done" value={stats.data.issues.done} color="text-green-600" />
-          <StatCard label="Agents" value={stats.data.agents.total} color="text-purple-600" />
+        <div className="space-y-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            <StatCard
+              label="In Progress"
+              value={stats.data.issues.inProgress}
+              color="text-blue-600"
+              icon="⚡"
+              highlight={stats.data.issues.inProgress > 10}
+              subtitle={stats.data.issues.inProgress > 10 ? "High load" : "Active work"}
+            />
+            <StatCard
+              label="In Review"
+              value={stats.data.issues.inReview}
+              color="text-yellow-600"
+              icon="👁️"
+              highlight={stats.data.issues.inReview > 5}
+              subtitle={stats.data.issues.inReview > 5 ? "Needs attention" : "Pending review"}
+            />
+            <StatCard
+              label="Backlog"
+              value={stats.data.issues.backlog}
+              color="text-gray-600"
+              icon="📋"
+              subtitle="Waiting to start"
+            />
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <StatCard
+              label="Total Issues"
+              value={stats.data.issues.total}
+              color="text-gray-900"
+              icon="📊"
+            />
+            <StatCard
+              label="Done"
+              value={stats.data.issues.done}
+              color="text-green-600"
+              icon="✅"
+            />
+            <StatCard
+              label="Agents"
+              value={stats.data.agents.total}
+              color="text-purple-600"
+              icon="🤖"
+              subtitle={`${stats.data.agents.active} active`}
+            />
+            <StatCard
+              label="Projects"
+              value={stats.data.projects.total}
+              color="text-indigo-600"
+              icon="🎯"
+            />
+          </div>
         </div>
       ) : null}
 
