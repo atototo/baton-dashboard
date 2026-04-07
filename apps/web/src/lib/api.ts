@@ -224,6 +224,46 @@ export interface AgentCosts {
   }>;
 }
 
+export interface CanonicalPlan {
+  text: string;
+  source: string;
+  approvalId: string;
+  approvalType: string;
+  approvalStatus: string;
+  updatedAt: string;
+}
+
+export interface RevisionEntry {
+  approvalId: string;
+  approvalType: string;
+  approvalStatus: string;
+  kind: string;
+  summary: string | null;
+  decisionNote: string | null;
+  createdAt: string;
+  decidedAt: string | null;
+}
+
+export interface DiffMetadata {
+  available: boolean;
+  branch: string | null;
+  baseBranch: string | null;
+  commitSha: string | null;
+  pullRequestUrl: string | null;
+  pullRequestNumber: number | null;
+}
+
+export interface ContextSignal {
+  key: string;
+  label: string;
+  value: number;
+}
+
+export interface ContextDiagnostics {
+  signals: ContextSignal[];
+  details: Record<string, unknown>;
+}
+
 export interface WorkflowSession {
   id: string;
   issueId: string;
@@ -243,6 +283,10 @@ export interface WorkflowSession {
   pullRequestNumber: number | null;
   prOpenedAt: string | null;
   lastPrCheckedAt: string | null;
+  canonicalPlan: CanonicalPlan | null;
+  revisionHistory: RevisionEntry[];
+  diff: DiffMetadata;
+  contextDiagnostics: ContextDiagnostics;
   requestedByAgentId: string | null;
   requestedByUserId: string | null;
   runId: string | null;

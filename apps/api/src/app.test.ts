@@ -186,6 +186,9 @@ test("GET /api/issues/:id/workflow-sessions returns normalized workflow sessions
   assert.equal(typeof latest.stale, "boolean");
   assert.equal(typeof latest.revision, "boolean");
   assert.equal(typeof latest.consumed, "boolean");
+  assert.equal(typeof latest.diff, "object");
+  assert.equal(typeof latest.contextDiagnostics, "object");
+  assert.equal(typeof latest.revisionHistory, "object");
 
   const revisionSession = sessions.find((session: { revision: boolean; approvalStatus: string }) =>
     session.revision && session.approvalStatus === "rejected",
@@ -196,6 +199,70 @@ test("GET /api/issues/:id/workflow-sessions returns normalized workflow sessions
     session.consumed && typeof session.commitSha === "string",
   );
   assert.ok(consumedSession, "expected at least one consumed session with commit metadata");
+
+  assert.ok(
+    latest.canonicalPlan && typeof latest.canonicalPlan.text === "string" && latest.canonicalPlan.text.length > 0,
+    "latest session should expose canonical plan text",
+  );
+  assert.equal(typeof latest.canonicalPlan.source, "string");
+
+  assert.ok(Array.isArray(latest.revisionHistory));
+  assert.ok(
+    latest.revisionHistory.some(
+      (entry: { kind: string; approvalStatus: string }) =>
+        entry.kind === "revision_requested" || entry.approvalStatus === "rejected",
+    ),
+    "revision history should include at least one revision-related entry",
+  );
+
+  assert.equal(typeof latest.diff.available, "boolean");
+  assert.equal(typeof latest.diff.branch, "string");
+  assert.equal(typeof latest.diff.baseBranch, "string");
+  assert.equal(typeof latest.diff.pullRequestUrl, "string");
+  assert.equal(typeof latest.diff.pullRequestNumber, "number");
+  assert.equal(typeof latest.diff.commitSha, "string");
+
+  assert.equal(typeof latest.contextDiagnostics.highPressure, "boolean");
+  assert.equal(typeof latest.contextDiagnostics.hasRecall, "boolean");
+  assert.equal(typeof latest.contextDiagnostics.isCompacted, "boolean");
+  assert.equal(typeof latest.contextDiagnostics.recallItemCount, "number");
+  assert.ok(Array.isArray(latest.contextDiagnostics.signals));
+
+  assert.ok(latest.contextSnapshot && typeof latest.contextSnapshot === "object");
+  assert.ok(
+    "promptSnapshot" in (latest.contextSnapshot as Record<string, unknown>),
+    "context snapshot should expose promptSnapshot for workflow diagnostics",
+  );
+});
+
+test("GET /api/issues/:id/workflow-sessions derives context diagnostics from prompt snapshots", async () => {
+  const issue = await getIssueByIdentifier("DOB-209");
+
+  const response = await app.request(`/api/issues/${issue.id}/workflow-sessions`);
+
+  assert.equal(response.status, 200);
+
+  const sessions = await response.json();
+  assert.ok(Array.isArray(sessions));
+  assert.ok(sessions.length > 0);
+
+  const [latest] = sessions;
+  assert.equal(latest.contextDiagnostics.hasRecall, true);
+  assert.equal(latest.contextDiagnostics.isCompacted, true);
+  assert.ok(
+    latest.contextDiagnostics.signals.some((signal: { key: string }) => signal.key === "recall"),
+    "expected recall signal derived from prompt snapshot recall stats",
+  );
+  assert.ok(
+    latest.contextDiagnostics.signals.some((signal: { key: string }) => signal.key === "compacted"),
+    "expected compacted signal derived from prompt snapshot budget stats",
+  );
+  assert.ok(
+    latest.contextSnapshot &&
+      typeof latest.contextSnapshot === "object" &&
+      "promptSnapshot" in (latest.contextSnapshot as Record<string, unknown>),
+    "workflow session should surface promptSnapshot alongside the raw context snapshot",
+  );
 });
 
 test("GET /api/issues/stats/summary filters by companyId and projectId", async () => {

@@ -98,7 +98,15 @@ const asRecord = (value: unknown): Record<string, unknown> | null => {
   return value as Record<string, unknown>;
 };
 
+const asArray = (value: unknown): unknown[] => (Array.isArray(value) ? value : []);
+
 const asString = (value: unknown): string | null => (typeof value === "string" && value.length > 0 ? value : null);
+
+const asTrimmedString = (value: unknown): string | null => {
+  if (typeof value !== "string") return null;
+  const normalized = value.trim();
+  return normalized.length > 0 ? normalized : null;
+};
 
 const asNumber = (value: unknown): number | null => {
   if (typeof value === "number" && Number.isFinite(value)) return value;
@@ -111,11 +119,164 @@ const asNumber = (value: unknown): number | null => {
 
 const coalesceString = (...values: unknown[]) => {
   for (const value of values) {
-    const normalized = asString(value);
+    const normalized = asTrimmedString(value);
     if (normalized) return normalized;
   }
 
   return null;
+};
+
+const mergeContextSnapshot = (contextSnapshot: unknown, promptSnapshot: unknown) => {
+  const contextRecord = asRecord(contextSnapshot) ?? {};
+
+  if (!promptSnapshot) return contextRecord;
+
+  return {
+    ...contextRecord,
+    promptSnapshot,
+  };
+};
+
+const getCanonicalPlan = (approvals: Array<{
+  approvalId: string;
+  approvalType: string;
+  approvalStatus: string;
+  payload: unknown;
+  decisionNote: string | null;
+  createdAt: string;
+  updatedAt: string;
+}>) => {
+  for (let index = approvals.length - 1; index >= 0; index -= 1) {
+    const approval = approvals[index];
+    const payload = asRecord(approval.payload);
+    const candidates = [
+      { text: asTrimmedString(payload?.plan), source: "plan" },
+      { text: asTrimmedString(payload?.summary), source: "summary" },
+      { text: asTrimmedString(approval.decisionNote), source: "decision_note" },
+    ];
+
+    for (const candidate of candidates) {
+      if (!candidate.text) continue;
+
+      return {
+        text: candidate.text,
+        source: candidate.source,
+        approvalId: approval.approvalId,
+        approvalType: approval.approvalType,
+        approvalStatus: approval.approvalStatus,
+        updatedAt: approval.updatedAt ?? approval.createdAt,
+      };
+    }
+  }
+
+  return null;
+};
+
+const getRevisionHistory = (approvals: Array<{
+  approvalId: string;
+  approvalType: string;
+  approvalStatus: string;
+  payload: unknown;
+  decisionNote: string | null;
+  createdAt: string;
+  decidedAt: string | null;
+}>) =>
+  approvals
+    .map((approval) => {
+      const payload = asRecord(approval.payload);
+      const workflowState = toWorkflowStatus({
+        approvalStatus: approval.approvalStatus,
+        approvalType: approval.approvalType,
+        payload,
+      });
+      const kind = workflowState.revision
+        ? "revision_requested"
+        : approval.approvalStatus === "approved"
+          ? "approved"
+          : "submitted";
+      const summary = coalesceString(payload?.summary, payload?.plan, approval.decisionNote);
+
+      if (!summary && kind === "submitted") return null;
+
+      return {
+        approvalId: approval.approvalId,
+        approvalType: approval.approvalType,
+        approvalStatus: approval.approvalStatus,
+        kind,
+        summary,
+        decisionNote: approval.decisionNote,
+        createdAt: approval.createdAt,
+        decidedAt: approval.decidedAt,
+      };
+    })
+    .filter((entry): entry is NonNullable<typeof entry> => entry !== null);
+
+const getContextDiagnostics = (promptSnapshot: unknown) => {
+  const prompt = asRecord(promptSnapshot);
+  const budgetStats = asRecord(prompt?.budgetStats);
+  const recallStats = asRecord(prompt?.recallStats);
+  const selectedRecall = asRecord(prompt?.selectedRecall);
+  const recallItems = asArray(selectedRecall?.items).map((item) => asRecord(item)).filter(Boolean) as Array<
+    Record<string, unknown>
+  >;
+  const availableChars = asNumber(budgetStats?.availableChars) ?? 0;
+  const includedChars = asNumber(budgetStats?.includedChars) ?? 0;
+  const droppedLayerCount = asNumber(budgetStats?.droppedLayerCount) ?? 0;
+  const compactedLayerCount = asNumber(budgetStats?.compactedLayerCount) ?? 0;
+  const compactedCharsSaved = asNumber(budgetStats?.compactedCharsSaved) ?? 0;
+  const recallItemCount = asNumber(recallStats?.itemCount) ?? recallItems.length;
+  const highestRecallScore = asNumber(recallStats?.highestScore);
+  const utilization = availableChars > 0 ? includedChars / availableChars : 0;
+  const highPressure = droppedLayerCount > 0 || utilization >= 0.85;
+  const hasRecall = recallItemCount > 0;
+  const isCompacted =
+    compactedLayerCount > 0 || recallItems.some((item) => asTrimmedString(item.reason) === "compacted_context");
+  const signals = [];
+
+  if (highPressure) {
+    signals.push({
+      key: "high_pressure",
+      label: "High pressure",
+      value: utilization,
+    });
+  }
+
+  if (hasRecall) {
+    signals.push({
+      key: "recall",
+      label: "Recall",
+      value: recallItemCount,
+    });
+  }
+
+  if (isCompacted) {
+    signals.push({
+      key: "compacted",
+      label: "Compacted",
+      value: compactedCharsSaved,
+    });
+  }
+
+  return {
+    highPressure,
+    hasRecall,
+    isCompacted,
+    availableChars,
+    includedChars,
+    utilization,
+    droppedLayerCount,
+    compactedLayerCount,
+    compactedCharsSaved,
+    recallItemCount,
+    highestRecallScore,
+    signals,
+    recallItems: recallItems.map((item) => ({
+      key: asString(item.key),
+      kind: asString(item.kind),
+      reason: asString(item.reason),
+      score: asNumber(item.score),
+    })),
+  };
 };
 
 const toWorkflowStatus = (args: {
@@ -218,6 +379,7 @@ issuesRoute.get("/:id/workflow-sessions", async (c) => {
       startedAt: schema.heartbeatRuns.startedAt,
       finishedAt: schema.heartbeatRuns.finishedAt,
       contextSnapshot: schema.heartbeatRuns.contextSnapshot,
+      promptSnapshot: schema.heartbeatRuns.promptSnapshot,
     })
     .from(schema.heartbeatRuns)
     .where(
@@ -230,6 +392,9 @@ issuesRoute.get("/:id/workflow-sessions", async (c) => {
       ),
     )
     .orderBy(asc(schema.heartbeatRuns.createdAt));
+
+  const latestDiagnosticRunOverall =
+    [...runRows].reverse().find((run) => run.promptSnapshot || run.contextSnapshot) ?? null;
 
   const sessions = approvalRows.map((approval, index) => {
     const nextApproval = approvalRows[index + 1];
@@ -245,7 +410,22 @@ issuesRoute.get("/:id/workflow-sessions", async (c) => {
       return run.createdAt < nextApproval.createdAt;
     });
     const latestRun = sessionRuns.at(-1) ?? null;
+    const diagnosticRun =
+      [...sessionRuns].reverse().find((run) => run.promptSnapshot || run.contextSnapshot) ??
+      latestDiagnosticRunOverall ??
+      latestRun;
     const isLatest = index === approvalRows.length - 1;
+    const approvalsThroughCurrent = approvalRows.slice(0, index + 1);
+    const mergedContextSnapshot = mergeContextSnapshot(
+      diagnosticRun?.contextSnapshot ?? latestRun?.contextSnapshot ?? null,
+      diagnosticRun?.promptSnapshot ?? null,
+    );
+    const branch = coalesceString(payload?.branch, workspace?.branch);
+    const baseBranch = coalesceString(payload?.baseBranch, workspace?.baseBranch);
+    const commitSha = coalesceString(payload?.commitSha, isLatest ? workspace?.lastBranchCommitSha : null);
+    const pullRequestUrl = coalesceString(payload?.pullRequestUrl, isLatest ? workspace?.pullRequestUrl : null);
+    const pullRequestNumber =
+      asNumber(payload?.pullRequestNumber) ?? asNumber(isLatest ? workspace?.pullRequestNumber : null);
 
     return {
       id: approval.approvalId,
@@ -259,13 +439,23 @@ issuesRoute.get("/:id/workflow-sessions", async (c) => {
       stale: workflowState.stale,
       revision: workflowState.revision,
       consumed: workflowState.consumed,
-      branch: coalesceString(payload?.branch, workspace?.branch),
-      baseBranch: coalesceString(payload?.baseBranch, workspace?.baseBranch),
-      commitSha: coalesceString(payload?.commitSha, isLatest ? workspace?.lastBranchCommitSha : null),
-      pullRequestUrl: coalesceString(payload?.pullRequestUrl, isLatest ? workspace?.pullRequestUrl : null),
-      pullRequestNumber: asNumber(payload?.pullRequestNumber) ?? asNumber(isLatest ? workspace?.pullRequestNumber : null),
+      branch,
+      baseBranch,
+      commitSha,
+      pullRequestUrl,
+      pullRequestNumber,
       prOpenedAt: coalesceString(payload?.prOpenedAt, isLatest ? workspace?.prOpenedAt : null),
       lastPrCheckedAt: isLatest ? workspace?.lastPrCheckedAt ?? null : null,
+      canonicalPlan: getCanonicalPlan(approvalsThroughCurrent),
+      revisionHistory: getRevisionHistory(approvalsThroughCurrent),
+      diff: {
+        available: Boolean(branch && baseBranch && (commitSha || pullRequestUrl || pullRequestNumber)),
+        branch,
+        baseBranch,
+        commitSha,
+        pullRequestUrl,
+        pullRequestNumber,
+      },
       requestedByAgentId: approval.requestedByAgentId,
       requestedByUserId: approval.requestedByUserId,
       runId: latestRun?.id ?? null,
@@ -275,7 +465,8 @@ issuesRoute.get("/:id/workflow-sessions", async (c) => {
       runStartedAt: latestRun?.startedAt ?? null,
       runFinishedAt: latestRun?.finishedAt ?? null,
       runCount: sessionRuns.length,
-      contextSnapshot: latestRun?.contextSnapshot ?? null,
+      contextSnapshot: mergedContextSnapshot,
+      contextDiagnostics: getContextDiagnostics(diagnosticRun?.promptSnapshot ?? null),
       decisionNote: approval.decisionNote,
       createdAt: approval.createdAt,
       decidedAt: approval.decidedAt,
