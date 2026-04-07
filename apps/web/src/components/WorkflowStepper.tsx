@@ -1,3 +1,4 @@
+import { FileText, Wrench, Eye, CheckCircle2 } from "lucide-react";
 import type { WorkflowSession } from "../lib/api";
 
 export type FlowStage = "plan" | "implementation" | "review" | "complete";
@@ -9,7 +10,7 @@ interface WorkflowStepperProps {
 interface StageInfo {
   stage: FlowStage;
   label: string;
-  icon: string;
+  Icon: React.ComponentType<{ className?: string }>;
   completed: boolean;
   current: boolean;
   hasRevision: boolean;
@@ -46,7 +47,7 @@ function deriveFlowStages(sessions: WorkflowSession[]): StageInfo[] {
     {
       stage: "plan",
       label: "계획",
-      icon: "📋",
+      Icon: FileText,
       completed: hasPlan && (hasImplementation || hasReview || hasCompletion),
       current: currentStage === "plan",
       hasRevision: planSessions.some((s) => s.revision),
@@ -55,7 +56,7 @@ function deriveFlowStages(sessions: WorkflowSession[]): StageInfo[] {
     {
       stage: "implementation",
       label: "구현",
-      icon: "⚙️",
+      Icon: Wrench,
       completed: hasImplementation && (hasReview || hasCompletion),
       current: currentStage === "implementation",
       hasRevision: implSessions.some((s) => s.revision),
@@ -64,7 +65,7 @@ function deriveFlowStages(sessions: WorkflowSession[]): StageInfo[] {
     {
       stage: "review",
       label: "검토",
-      icon: "👀",
+      Icon: Eye,
       completed: hasReview && hasCompletion,
       current: currentStage === "review",
       hasRevision: reviewSessions.some((s) => s.revision),
@@ -73,7 +74,7 @@ function deriveFlowStages(sessions: WorkflowSession[]): StageInfo[] {
     {
       stage: "complete",
       label: "완료",
-      icon: "✅",
+      Icon: CheckCircle2,
       completed: hasCompletion,
       current: currentStage === "complete",
       hasRevision: completionSessions.some((s) => s.revision),
@@ -99,6 +100,7 @@ export function WorkflowStepper({ sessions }: WorkflowStepperProps) {
 
         {stages.map((stage) => {
           const isActive = stage.current || stage.completed;
+          const { Icon } = stage;
 
           return (
             <div key={stage.stage} className="flex-1 flex flex-col items-center relative z-10">
@@ -112,7 +114,7 @@ export function WorkflowStepper({ sessions }: WorkflowStepperProps) {
                     : "bg-white border-gray-300 text-gray-400"
                 }`}
               >
-                <span className="text-lg">{stage.icon}</span>
+                <Icon className="w-5 h-5" />
               </div>
 
               {/* Stage label */}
